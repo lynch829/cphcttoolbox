@@ -1,0 +1,43 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+#
+# --- BEGIN_HEADER ---
+#
+# __init__ - center slice fdk cuda engine kernels module init
+# Copyright (C) 2011-2012  The Cph CT Toolbox Project lead by Brian Vinter
+#
+# This file is part of Cph CT Toolbox.
+#
+# Cph CT Toolbox is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# Cph CT Toolbox is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+# USA.
+#
+# -- END_HEADER ---
+#
+
+"""Cph CT Toolbox center slice FDK cuda engine kernels module initializer"""
+
+__dummy = \
+    '''This dummy right after the module doc string prevents PythonTidy
+from incorrectly moving following comments above module doc string'''
+
+# Functions available from cphct.cone.fdk.cu.kernels
+
+from cphct.cone.fdk.cu.kernels.initialize import init_recon, rt_const
+from cphct.cone.fdk.cu.kernels.base import reconstruct_proj
+
+# All sub modules to load in case of 'from X import *'
+
+__all__ = []

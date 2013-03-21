@@ -1,0 +1,200 @@
+CphCT Toolbox README
+Last updated/generated 20-03-2013 11:22
+
+
+  1. Cph CT Toolbox
+  2. Requirements
+  3. Installation
+    3.1. Pip
+    3.2. Easy_install
+    3.3. Manual Installation
+  4. Run from Source
+  5. Upgrade
+  6. Uninstallation
+  7. Questions and Feedback
+  8. External References
+
+
+  1. Cph CT Toolbox
+  =================
+
+Copenhagen Computed Tomography Toolbox is a collection of applications and
+libraries for flexible and efficient CT reconstruction. The tools generally
+take a set of projections (X-ray intensity or attenuation measurements)
+and filter and back project them in order to recreate the physical image
+or volume that the projections represent.
+
+The tools are divided in the categories fan beam and cone beam with individual
+algorithm implementations in the corresponding category folders. Thus
+e.g. the cone beam FDK algorithm is implemented in conebeam/fdk/.
+
+Implementations provide one or more engines optimized for particular hardware
+platforms like CUDA enabled GPUs or OpenCL enabled CPUs and GPUs. In most cases
+there will additionally be a NumPy reference implementation which may be
+more easily understood and useful as a fall back on platforms where no
+further optimized engines apply.
+
+The doc folder contains more detailed instructions and background information
+about the individual tools.
+
+
+  2. Requirements
+  ===============
+
+The CphCT Toolbox relies on Python[1] and Numpy[2] for all core
+functionality. Optimized CUDA and OpenCL application engines
+additionally require the PyCUDA[3] and PyOpenCL[4] libraries which in turn
+require access to working CUDA and OpenCL runtimes. Please refer to the
+individual documentation pages online in order to satisfy those
+dependencies.
+
+The toolbox should work with any Python-2.5+ interpreter and a fairly
+recent Numpy installation, but we have only tested with Python 2.6+ and
+Numpy-1.3.1+ installations. If you want the reconstruction results saved
+as images rather than a raw binary dump you will additionally need the
+Python Imaging Library (PIL) or Scipy.
+
+
+  3. Installation
+  ===============
+
+We provide three installation methods to support the widest possible
+range of platforms. The easiest way to install is with the pip or
+easy_install methods that can pull down the package directly from the
+internet and take care of the entire installation. Manual installation
+from downloaded source or repository checkout is also possible, however.
+Please note that all the system wide installation commands may require
+administrative privileges. 
+
+
+	3.1. Pip
+	========
+
+We recommend installation with pip[5] because it makes upgrades and
+uninstallation very easy.
+Simply run pip with the default pypi.python.org as package source:
+
+  pip install cphcttoolbox
+
+Alternatively you can point pip to a specific version:
+
+  pip install http://cphcttoolbox.googlecode.com/files/cphcttoolbox-1.0.0.zip
+
+If for some reason you can't or don't want to install globally on your
+system with pip you may still be able to use virtualenv[6] to
+install with pip but in an isolated environment.
+
+
+	3.2. Easy_install
+	=================
+
+If you do not have access to pip, easy_install[7] provides the second best choice. 
+Simply run easy_install with the default pypi.python.org as package source:
+
+  easy_install cphcttoolbox
+
+Alternatively you can point easy_install to a specific version:
+
+  easy_install http://cphcttoolbox.googlecode.com/files/cphcttoolbox-1.0.0.zip
+
+
+	3.3. Manual Installation
+	========================
+
+If you do not have access to pip and easy_install or if you want more
+control over the install process you can use the traditional Python
+setup method.
+First download the source code archive or check out a version from the
+repository. Then run setup as usual:
+
+  python setup.py install
+
+or add any additional options to the command in order to tweak the
+installation.
+
+
+  4. Run from Source
+  ==================
+
+It is also possible to run the toolbox applications directly from source
+code without installing. Three steps are required to use this setup:
+
+ 1. Download the source code archive from the internet
+ 2. Unpack the archive somewhere
+ 3. Set the PYTHONPATH environment to the unpacked directory path
+
+Now you can run the applications using the absolute application paths. 
+
+An ultra short command line example to illustrate it:
+  wget http://cphcttoolbox.googlecode.com/files/cphcttoolbox-1.0.0.zip
+  unzip cphcttoolbox-1.0.0.zip
+  export PYTHONPATH=${PWD}/cphcttoolbox-1.0.0
+  python cphcttoolbox-1.0.0/conebeam/katsevich/katsevich.py --help
+
+
+The archive download and unpack may be replaced by a checkout from the
+online code repository.
+
+
+  5. Upgrade
+  ==========
+
+Upgrading is very simple if you installed the toolbox with pip or
+easy_install. Simply run the install command again with the
+--upgrade flag like:
+
+  pip install --upgrade cphcttoolbox
+
+or
+
+  easy_install --upgrade cphcttoolbox
+
+respectively.
+If you installed manually from source you may be able to simply repeat
+the installation procedure with the updated source, but we recommend
+that you follow the instructions in the Uninstallation section to remove
+any old leftovers before repeating the install steps. 
+
+
+  6. Uninstallation
+  =================
+
+In case you installed with pip it is very simple to uninstall the
+toolbox again:
+
+  pip uninstall cphcttoolbox
+
+For easy_install and manual installations it is more cumbersome because
+manual removal of the installed files is required. You will find
+installed scripts in /usr/local/bin and libraries in your python
+site-packages or dist-packages directories by default. You can probably
+just delete them to remove the toolbox, but please refer to e.g. [8] for
+details about the process of cleaning up after manually or
+easy_install'ed packages.
+
+If you only ran the toolbox applications from unpacked source you can
+simply delete the unpacked cphcttoolbox directory to completely remove
+the toolbox.
+
+
+  7. Questions and Feedback
+  =========================
+
+Questions, contributions and comments are always welcome. Just write to
+jonas DOT bardino AT gmail DOT com or one of the other developers listed
+at the official web site.
+
+
+  8. External References
+  ======================
+
+ 1. http://www.python.org/
+ 2. http://numpy.scipy.org/
+ 3. http://mathema.tician.de/software/pycuda
+ 4. http://mathema.tician.de/software/pyopencl
+ 5. http://pypi.python.org/pypi/pip
+ 6. http://pypi.python.org/pypi/virtualenv
+ 7. http://packages.python.org/distribute/easy_install.html
+ 8. http://thingsilearned.com/2009/04/13/easy_install-uninstalling/
+
+

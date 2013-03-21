@@ -1,0 +1,28 @@
+CphCT Toolbox NEWS
+Last updated/generated 20-03-2013 11:22
+
+
+  1. CphCT Toolbox News
+    1.1. CphCT 1.0.0
+
+
+  1. CphCT Toolbox News
+  =====================
+
+This document contains a summary of project news and updates.
+The sub sections describe the most important changes and addition for
+each public release.
+
+
+	1.1. CphCT 1.0.0
+	================
+
+Our first public release of the toolbox with fan and cone beam
+implementations. We provide Numpy and CUDA engines so far, but we are
+working on OpenCL engines for the next release.
+
+ - Center Feldkamp-Davis-Kress (CenterFDK) Circular Fan Beam Reconstruction
+ - Feldkamp-Davis-Kress (FDK) Circular Cone Beam Reconstruction
+ - Katsevich Spiral Cone Beam Reconstruction
+ - Basic instructions for using each of the applications
+
