@@ -84,8 +84,8 @@ def __get_gpu_layouts(
     proj_height,
     proj_width,
     proj_rebin,
+    chunk_size,
     x_voxels,
-    y_voxels,
     max_gpu_threads_pr_block,
     ):
     """
@@ -100,10 +100,10 @@ def __get_gpu_layouts(
        Number of columns in the projection matrix
     proj_rebin : int
        Number of rebin rows in the projection filtering
+    chunk_size : int
+       Field of View chunk size, i.e. number of z-slices per chunk
     x_voxels : int
        Field of View resolution in x
-    y_voxels : int
-       Field of View resolution in y
     max_gpu_threads_pr_block : int
        The maximum number of threads in each GPU block
       
@@ -135,7 +135,7 @@ def __get_gpu_layouts(
 
     # Create backprojection Layout
 
-    gpu_backproject_layout = get_gpu_layout(y_voxels, x_voxels,
+    gpu_backproject_layout = get_gpu_layout(chunk_size, x_voxels,
             max_gpu_threads_pr_block)
 
     logging.debug('gpu_backproject_layout: %s'
@@ -179,8 +179,8 @@ def init_recon(conf, fdt):
         conf['detector_rows'],
         conf['detector_columns'],
         conf['detector_rebin_rows'],
+        conf['chunk_size'],
         conf['x_voxels'],
-        conf['y_voxels'],
         conf['gpu_target_threads'],
         )
 

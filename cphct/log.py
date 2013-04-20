@@ -105,7 +105,7 @@ def log_scan_geometry(conf, opts):
                    "detector_distance", "source_distance",
                    "x_min", "x_max", "y_min", "y_max", "z_min", "z_max",
                    "x_voxels", "y_voxels", "z_voxels", 
-                   "projs_per_turn", "progress_per_turn",
+                   "projs_per_turn", "progress_per_turn", "chunk_size",
                    ]
     debug_fields = ["total_turns", "detector_row_offset",
                     "detector_column_offset", "detector_rebin_rows"]

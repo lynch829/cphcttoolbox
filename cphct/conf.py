@@ -497,6 +497,11 @@ def _shared_opts():
         Returns a dictionary of options helper dictionaries.
     """
 
+    # chunk_range defines chunks of FoV to reconstruct in each step to improve
+    # memory locality for cache optimizations and to limit total memory
+    # requirements. The actual mapping to FoV chunks is application dependent.
+    # In the cone beam applications we map chunks to a number of z-slices.
+
     opts = {
         'args': {
             'long': None,
@@ -798,6 +803,23 @@ def _shared_opts():
             'default': {},
             'description': 'Helper used to share variables between plugins',
             },
+        'chunk_range': {
+            'long': 'chunk-range',
+            'short': None,
+            'args': str,
+            'handler': colon_int_values,
+            'default': None,
+            'description': 'Select range of chunks to reconstruct',
+            },
+        'chunk_size': {
+            'long': 'chunk-size',
+            'short': None,
+            'args': int,
+            'handler': int_value,
+            'default': -1,
+            'description': 'Application dependent size of reconstruction ' + \
+            'chunks',
+            },
         }
 
     return opts
@@ -940,8 +962,8 @@ def _cu_opts():
             'args': int,
             'handler': int_value,
             'default': 256*2**20,
-            'description': 'Amount of GPU memory in bytes to aim for during ' \
-                + 'projection filter chunk size selection',
+            'description': 'GPU memory in bytes to aim for with projection ' \
+                + 'filter chunking',
             },
         'gpu_projs_only': {
             'long': 'gpu-projs-only',

@@ -472,7 +472,7 @@ def get_gpu_layout(rows, cols, max_gpu_threads_pr_block):
         raise ValueError('Wrong block_ydim: %s' % block_ydim)
 
     grid_ydim = rows / block_ydim
-    if grid_ydim < 1.0 or cols % block_ydim != 0:
+    if grid_ydim < 1.0 or rows % block_ydim != 0:
         raise ValueError('Wrong grid_ydim: %s' % grid_ydim)
 
     return ((int(block_xdim), int(block_ydim), 1), (int(grid_xdim),

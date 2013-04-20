@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # __init__ - shared lib module init
-# Copyright (C) 2011-2012  The Cph CT Toolbox Project lead by Brian Vinter
+# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -56,7 +56,7 @@ short_name = 'cphcttoolbox'
 
 # IMPORTANT: Please keep version in sync with doc-src/README.t2t
 
-version_tuple = (1, 0, 0)
+version_tuple = (1, 0, 1)
 version_suffix = ''
 version_string = '.'.join([str(i) for i in version_tuple]) + version_suffix
 package_version = '%s %s' % (package_name, version_string)

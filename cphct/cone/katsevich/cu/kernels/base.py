@@ -234,6 +234,18 @@ def backproject_chunk(
                         / y_parts)
     logging.debug('backproject kernel with layout %s %s'
                  % (backproject_block, backproject_grid))
+
+    # We want to divide work so that thread warps access a sequential slice of
+    # memory, i.e. voxels in adjacent z positions. Thus we use first index inside
+    # thread blocks for z index and leave x, y and projs to fill the rest.
+
+    # Layouts are calculated for a single slice so we scale grids to fit
+    gpu_layouts = conf['app_state']['gpu']['layouts']
+    backproject_block, _ = gpu_layouts['backproject']
+    backproject_grid = (conf['y_voxels'], conf['chunk_size'] * conf['x_voxels']
+                        / (backproject_block[0] * backproject_block[1]))
+    logging.debug('backproject kernel with new layout %s %s'
+                 % (backproject_block, backproject_grid))
     
     chunk_time = backproject_chunk(
         int32(first),

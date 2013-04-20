@@ -120,15 +120,16 @@ __device__ int get_global_tid_2D_3D()
 /* please note that order in filtering block is reversed to col, row, proj */
 /* filter called with (A, B, 1) x (projs, C) where A*B*C=rows*cols */
 /* rebin called with (A, B, 1) x (projs, C) where A*B*C=rebin_rows*cols */
-/* backproj called with (A, B, chunk_size) x (D, E) where A*D=x_voxels and B*E=y_voxels */
+/* backproj called with (A, B, 1) x (y_voxels, C) where A*B*C=x_voxels*chunk_size */
 #define thread_filtering_global_id() (blockIdx.y*(blockDim.x*blockDim.y)+(threadIdx.y*blockDim.x)+threadIdx.x)
 #define thread_filtering_row() (thread_filtering_global_id() / rt_detector_columns)
 #define thread_filtering_col() (thread_filtering_global_id() % rt_detector_columns)
 #define thread_filtering_proj_local() (blockDim.z*blockIdx.x+threadIdx.z) 
 #define thread_filtering_rebin_row() (thread_filtering_global_id() / rt_detector_columns)
-#define thread_backproject_x() (blockDim.x*blockIdx.x+threadIdx.x)
-#define thread_backproject_y() (blockDim.y*blockIdx.y+threadIdx.y)
-#define thread_backproject_z() (blockDim.z*blockIdx.z+threadIdx.z)
+#define thread_backproject_global_id() (blockIdx.y*(blockDim.x*blockDim.y)+(threadIdx.y*blockDim.x)+threadIdx.x)
+#define thread_backproject_x() (thread_backproject_global_id() % rt_x_voxels)
+#define thread_backproject_y() (blockDim.z*blockIdx.x+threadIdx.z) 
+#define thread_backproject_z() (thread_backproject_global_id() / rt_x_voxels)
 
 
 /*

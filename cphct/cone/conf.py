@@ -48,9 +48,7 @@ def _shared_opts():
         Returns a dictionary of options helper dictionaries.
     """
 
-    # chunk_range is Z-slices in FoV to reconstruct in each step to improve
-    # memory locality for cache optimizations and to limit total memory
-    # requirements.
+    # Override general chunk-size for a cone-specific description
 
     opts = {
         'detector_pixel_height': {
@@ -111,21 +109,13 @@ def _shared_opts():
             'default': 512,
             'description': 'Field of View resolution in z',
             },
-        'chunk_range': {
-            'long': 'chunk-range',
-            'short': None,
-            'args': str,
-            'handler': colon_int_values,
-            'default': None,
-            'description': 'Select range of chunks to reconstruct',
-            },
         'chunk_size': {
             'long': 'chunk-size',
             'short': None,
             'args': int,
             'handler': int_value,
             'default': -1,
-            'description': 'Number of slices in reconstruction chunks',
+            'description': 'Number of z slices in reconstruction chunks',
             },
         }
 
