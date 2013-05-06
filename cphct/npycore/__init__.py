@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # __init__ - global numpy core engine module init
-# Copyright (C) 2011  The Cph CT Toolbox Project lead by Brian Vinter
+# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -61,4 +61,6 @@ allowed_cdata_types = {
 
 # All sub modules to load in case of 'from X import *'
 
-__all__ = __numpy_all__ + locals().keys()
+__priv = [i for i in locals().keys() \
+          if not i in __numpy_all__ and not i.startswith('_')]
+__all__ = __numpy_all__ + __priv

@@ -1,10 +1,11 @@
 CphCT Toolbox NEWS
-Last updated/generated 20-04-2013 08:13
+Last updated/generated 06-05-2013 17:02
 
 
   1. CphCT Toolbox News
     1.1. CphCT 1.0.0
     1.2. CphCT 1.0.1
+    1.3. CphCT 1.0.2
 
 
   1. CphCT Toolbox News
@@ -33,4 +34,11 @@ working on OpenCL engines for the next release.
 
 Improved scalability of GPU apps to allow bigger problem sizes.
 Minor bugfixes in e.g. the automatic GPU block layout code.
+
+
+	1.3. CphCT 1.0.2
+	================
+
+Major bugfix in the numpy application initialization and in the
+Katsevich GPU block layout code for irregxular dimensions.
 

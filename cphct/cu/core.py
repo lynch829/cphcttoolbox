@@ -101,6 +101,41 @@ def gpu_exit(conf):
     return conf
 
 
+def get_gpu_device(gpu_context):
+    """
+    Extract GPU device handle from initialized CUDA gpu_context
+    
+    Parameters
+    ----------
+    gpu_context : Object
+        Initialized CUDA context
+      
+    Returns
+    -------
+    output : Object
+       Returns gpu device object
+    """
+    return gpu_context.get_device()
+
+
+def get_gpu_specs(gpu_context):
+    """
+    Extract dictionary of GPU specs from initialized CUDA gpu_context
+    
+    Parameters
+    ----------
+    gpu_context : Object
+        Initialized CUDA context
+      
+    Returns
+    -------
+    output : dict
+       Returns gpu device specs dictionary
+    """
+    specs = get_gpu_device(gpu_context).get_attributes()
+    return dict([(str(i), j) for (i, j) in specs.items()])
+
+
 def log_gpu_specs(conf):
     """Simple helper to write out GPU specs using logging
 
@@ -110,11 +145,11 @@ def log_gpu_specs(conf):
         Configuration dictionary.
     """
 
-    gpu_device = conf['gpu_context'].get_device()
+    gpu_device = get_gpu_device(conf['gpu_context'])
     logging.info('using GPU %d: %s' % (conf['cuda_device_index'],
                  gpu_device.name()))
     logging.debug('GPU specs:')
-    gpu_attrs = gpu_device.get_attributes()
+    gpu_attrs = get_gpu_specs(conf['gpu_context'])
     for (key, val) in gpu_attrs.items():
         logging.debug('%s: %s' % (key, val))
 
@@ -418,6 +453,8 @@ def get_gpu_layout(rows, cols, max_gpu_threads_pr_block):
     """
     Get GPU block layout based on rows and cols,
     and the number of threads pr. block. We aim at square layouts.
+    We always return a grid z-dimension of 1 to support devices with
+    compute capability less than 2.0 and CUDA versions prior to 4.0.
    
     Parameters
     ----------
@@ -432,7 +469,7 @@ def get_gpu_layout(rows, cols, max_gpu_threads_pr_block):
     -------
     output : tuple
        Tuple of GPU block and grid dimension tuples on the form:
-       ((block_xdim, block_ydim, block_zdim), (grid_xdim, grid_ydim))
+       ((block_xdim, block_ydim, block_zdim), (grid_xdim, grid_ydim, 1))
             
     Raises
     ------
@@ -476,4 +513,4 @@ def get_gpu_layout(rows, cols, max_gpu_threads_pr_block):
         raise ValueError('Wrong grid_ydim: %s' % grid_ydim)
 
     return ((int(block_xdim), int(block_ydim), 1), (int(grid_xdim),
-            int(grid_ydim)))
+            int(grid_ydim), 1))

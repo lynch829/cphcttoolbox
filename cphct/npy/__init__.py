@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # __init__ - shared numpy engine lib module init
-# Copyright (C) 2011  The Cph CT Toolbox Project lead by Brian Vinter
+# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -52,4 +52,7 @@ from cphct.npycore import *
 
 # All sub modules to load in case of 'from X import *'
 
-__all__ = __npycore_all__ + []
+__priv = [i for i in locals().keys() \
+          if not i in __npycore_all__ and not i.startswith('_')]
+__all__ = __npycore_all__ + __priv
+

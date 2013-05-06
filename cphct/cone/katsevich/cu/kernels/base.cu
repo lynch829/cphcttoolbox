@@ -32,6 +32,9 @@ Requires external init of geometry configuration like scan_radius and so on.
 This may come from init.cu or be hard coded from runtime generated code.
 */
 
+/* For CUDA_VERSION macro, etc */
+#include <cuda.h>
+
 /* For debugging */
 /*
 #include <stdio.h>
@@ -95,8 +98,10 @@ __device__ int get_global_tid_3D_3D() {
   return thread_id;
 }
 */
+/*
 #define get_global_block_id_3D_3D() (blockIdx.x + blockIdx.y * gridDim.x + gridDim.x * gridDim.y * blockIdx.z)
 #define get_global_thread_id_3D_3D() (get_global_block_id_3D_3D() * (blockDim.x * blockDim.y * blockDim.z) + (threadIdx.z * (blockDim.x * blockDim.y)) + (threadIdx.y * blockDim.x) + threadIdx.x)
+*/
 
 /* Define the following function with macros */
 /*
@@ -110,27 +115,55 @@ __device__ int get_global_tid_2D_3D()
   return thread_id;
 } 
 */
+/*
 #define get_global_block_id_2D_3D() (blockIdx.x + blockIdx.y * gridDim.x)
 #define get_global_thread_id_2D_3D() (get_global_block_id_2D_3D() * (blockDim.x * blockDim.y * blockDim.z) + (threadIdx.z * (blockDim.x * blockDim.y)) + (threadIdx.y * blockDim.x) + threadIdx.x)
-
+*/
 /* We only use 2D grids of 3D blocks */
+/*
 #define get_global_tid() get_global_thread_id_2D_3D()
+*/
 
 /* Thread assignment for all kernels */
 /* please note that order in filtering block is reversed to col, row, proj */
-/* filter called with (A, B, 1) x (projs, C) where A*B*C=rows*cols */
-/* rebin called with (A, B, 1) x (projs, C) where A*B*C=rebin_rows*cols */
-/* backproj called with (A, B, 1) x (y_voxels, C) where A*B*C=x_voxels*chunk_size */
-#define thread_filtering_global_id() (blockIdx.y*(blockDim.x*blockDim.y)+(threadIdx.y*blockDim.x)+threadIdx.x)
+
+#if (__CUDA_ARCH__ >= 200) && (CUDA_VERSION >= 4000)
+/* filter called with (Bx, By, 1) x (Gx, Gy, Gz) 
+   where Gz=projs, Bx*Gx=cols and By*Gy=rows */
+/* rebin called with (Bx, By, 1) x (Gx, Gy, Gz)
+   where Gz=projs, Bx*Gx=cols and By*Gy=rebin_rows */
+/* backproj called with (Bx, By, 1) x (Gx, Gy, Gz) 
+   where Gx=x_voxels, By*Gy=y_voxels and Bx*Gz=chunk_size */
+// iterate fastest over col, then row, then proj
+ //#warning compiling for 3D grid
+#define thread_filtering_row() ((blockIdx.y*blockDim.y)+threadIdx.y)
+#define thread_filtering_col() ((blockIdx.x*blockDim.x)+threadIdx.x)
+#define thread_filtering_proj_local() ((blockIdx.z*blockDim.z)+threadIdx.z) 
+#define thread_filtering_rebin_row() ((blockIdx.y*blockDim.y)+threadIdx.y)
+// iterate fastest over z, then y, then x
+#define thread_backproject_x() ((blockIdx.x*blockDim.z)+threadIdx.z)
+#define thread_backproject_y() ((blockIdx.y*blockDim.y)+threadIdx.y)
+#define thread_backproject_z() ((blockIdx.z*blockDim.x)+threadIdx.x) 
+#else
+/* filter called with (Bx, By, 1) x (Gx, Gy) 
+   where Gy=projs, Bx*By*Gx=rows*cols */
+/* rebin called with (Bx, By, 1) x (Gx, Gy) 
+   where Gy=projs, Bx*By*Gx=rebin_rows*cols */
+/* backproj called with (Bx, By, 1) x (Gx, Gy) 
+   where Gx=x_voxels, Bx*By*Gy=y_voxels*chunk_size */
+// iterate fastest over col, then row, then proj
+//#warning compiling for 2D grid
+#define thread_filtering_global_id() (blockIdx.x*(blockDim.x*blockDim.y)+(threadIdx.y*blockDim.x)+threadIdx.x)
 #define thread_filtering_row() (thread_filtering_global_id() / rt_detector_columns)
 #define thread_filtering_col() (thread_filtering_global_id() % rt_detector_columns)
-#define thread_filtering_proj_local() (blockDim.z*blockIdx.x+threadIdx.z) 
+#define thread_filtering_proj_local() (blockIdx.y*blockDim.z+threadIdx.z) 
 #define thread_filtering_rebin_row() (thread_filtering_global_id() / rt_detector_columns)
+// iterate fastest over y, then z, then x
 #define thread_backproject_global_id() (blockIdx.y*(blockDim.x*blockDim.y)+(threadIdx.y*blockDim.x)+threadIdx.x)
-#define thread_backproject_x() (thread_backproject_global_id() % rt_x_voxels)
-#define thread_backproject_y() (blockDim.z*blockIdx.x+threadIdx.z) 
-#define thread_backproject_z() (thread_backproject_global_id() / rt_x_voxels)
-
+#define thread_backproject_x() (blockIdx.x*blockDim.z+threadIdx.z) 
+#define thread_backproject_y() (thread_backproject_global_id() % rt_y_voxels)
+#define thread_backproject_z() (thread_backproject_global_id() / rt_y_voxels)
+#endif
 
 /*
 

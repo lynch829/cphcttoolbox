@@ -30,7 +30,7 @@
 """CUDA specific input/output helper functions"""
 
 from cphct.cu.io import fill_base_cu_conf
-from cphct.fan.npy.io import fill_fan_npycore_conf
+from cphct.fan.npycore.io import fill_fan_npycore_conf
 
 
 def fill_fan_cu_conf(conf):

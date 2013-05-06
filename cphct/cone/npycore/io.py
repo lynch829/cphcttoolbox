@@ -67,7 +67,7 @@ def fill_cone_npycore_conf(conf):
     # [*_min, *_max] leaving delta_* slightly bigger than *_len/*_voxs .
     # (one might argue that *_min is really min plus delta_*/2, but anyway)
 
-    conf['delta_z'] = fdt(conf['z_len'] / (conf['z_voxels'] - 1))
+    conf['delta_z'] = fdt(conf['z_len'] / max(conf['z_voxels'] - 1, 1))
 
     # Calculate generic pixel size for case without auto sizing
 

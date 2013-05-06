@@ -298,8 +298,9 @@ def reconstruct_volume(conf, npy_plugins):
                 log_checksum('projs part', chunk_view, chunk_view.size)
 
             # Skip filtering step if projections are already on filtered form
+            # Accept empty projs_meta to allow dummy runs without input
 
-            if projs_meta[-1]['filtered']:
+            if projs_meta and projs_meta[-1]['filtered']:
                 out_size = out_end - out_first
                 filter_out[:] = filter_in[:out_size]
             else:

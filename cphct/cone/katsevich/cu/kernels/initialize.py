@@ -34,7 +34,7 @@ from cphct.npycore import pi, zeros, empty, arange, sin, cos, tan, \
     arctan
 from cphct.npycore.io import npy_alloc, get_npy_data, get_npy_size
 from cphct.cu.io import cu_alloc, get_cu_data
-from cphct.cu.core import get_gpu_layout
+from cphct.cu.core import get_gpu_layout, get_gpu_specs
 from cphct.npycore.misc import linear_coordinates
 
 # Runtime constant variables for use in kernels - keep order in sync with gpu
@@ -81,11 +81,13 @@ rt_const['str'] = []
 
 
 def __get_gpu_layouts(
+    conf,
     proj_height,
     proj_width,
     proj_rebin,
-    chunk_size,
     x_voxels,
+    y_voxels,
+    chunk_size,
     max_gpu_threads_pr_block,
     ):
     """
@@ -94,16 +96,20 @@ def __get_gpu_layouts(
     
     Parameters
     ----------
+    conf : dict
+        Configuration dictionary.
     proj_height : int
        Number of rows in the projection matrix
     proj_width : int
        Number of columns in the projection matrix
     proj_rebin : int
        Number of rebin rows in the projection filtering
-    chunk_size : int
-       Field of View chunk size, i.e. number of z-slices per chunk
     x_voxels : int
        Field of View resolution in x
+    y_voxels : int
+       Field of View resolution in y
+    chunk_size : int
+       Field of View chunk size, i.e. number of z-slices per chunk
     max_gpu_threads_pr_block : int
        The maximum number of threads in each GPU block
       
@@ -118,14 +124,16 @@ def __get_gpu_layouts(
        If unable to generate valid GPU layouts
     """
 
-    # Create projection gpu_layout
+    # Create projection gpu_layout:
+    # iterate over columns for memory coalescing
 
     gpu_proj_layout = get_gpu_layout(proj_height, proj_width,
             max_gpu_threads_pr_block)
 
     logging.debug('gpu_proj_layout: %s' % str(gpu_proj_layout))
 
-    # Create projection filter gpu_layout
+    # Create projection filter gpu_layout:
+    # iterate over columns for memory coalescing
 
     gpu_proj_filter_layout = get_gpu_layout(proj_height,
             proj_width, max_gpu_threads_pr_block)
@@ -133,9 +141,10 @@ def __get_gpu_layouts(
     logging.debug('gpu_proj_filter_layout: %s'
                   % str(gpu_proj_filter_layout))
 
-    # Create backprojection Layout
+    # Create backprojection Layout:
+    # iterate over z for memory coalescing
 
-    gpu_backproject_layout = get_gpu_layout(chunk_size, x_voxels,
+    gpu_backproject_layout = get_gpu_layout(y_voxels, chunk_size,
             max_gpu_threads_pr_block)
 
     logging.debug('gpu_backproject_layout: %s'
@@ -143,7 +152,6 @@ def __get_gpu_layouts(
 
     return (gpu_proj_layout, gpu_proj_filter_layout,
             gpu_backproject_layout)
-
 
 def init_recon(conf, fdt):
     """
@@ -176,13 +184,16 @@ def init_recon(conf, fdt):
     (conf['app_state']['gpu']['layouts']['proj'], conf['app_state'
      ]['gpu']['layouts']['proj_filter'], conf['app_state']['gpu'
      ]['layouts']['backproject']) = __get_gpu_layouts(
+        conf,
         conf['detector_rows'],
         conf['detector_columns'],
         conf['detector_rebin_rows'],
-        conf['chunk_size'],
         conf['x_voxels'],
+        conf['y_voxels'],
+        conf['chunk_size'],
         conf['gpu_target_threads'],
         )
+    conf['app_state']['gpu']['specs'] = get_gpu_specs(conf['gpu_context'])
 
     # Create z voxel coordinate array
 
