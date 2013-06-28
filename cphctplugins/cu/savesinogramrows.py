@@ -139,15 +139,24 @@ def preprocess_input(
     abs_save_path = __plugin_state__['abs_save_path']
     min_value = __plugin_state__['min_value']
     max_value = __plugin_state__['max_value']
+    detector_rows = conf['detector_rows']
 
     # Write projection data to tmpfile
 
     first_proj = conf['app_state']['projs']['first']
     last_proj = conf['app_state']['projs']['last']
 
+    start_row = 0
+    end_row = detector_rows
+    if 'boundingbox' in conf['app_state']['projs']:
+        start_row = conf['app_state']['projs']['boundingbox'][0, 0]
+        end_row = conf['app_state']['projs']['boundingbox'][0, 1]
+    sinogram_row_count = end_row - start_row
+
     input_data = gpu_input_data.get()
+
     for proj_idx in xrange(first_proj, last_proj + 1):
-        proj_data = input_data[proj_idx - first_proj]
+        proj_data = input_data[proj_idx - first_proj, :sinogram_row_count]
 
         proj_min_value = proj_data.min()
         if proj_min_value < min_value:
@@ -157,13 +166,13 @@ def preprocess_input(
         if proj_max_value > max_value:
             max_value = proj_max_value
 
-        memmap_data[:, :, proj_idx] = proj_data
+        memmap_data[start_row:end_row, :, proj_idx] = proj_data
 
     # If last projection save images
 
     if last_proj == total_projs - 1:
         dynamic_range = (min_value, max_value)
-        for row in xrange(conf['detector_rows']):
+        for row in xrange(detector_rows):
             sinogram_save_path = abs_save_path % row
             save_auto(sinogram_save_path, memmap_data[row],
                       dynamic_range)

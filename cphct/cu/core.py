@@ -29,11 +29,115 @@
 
 """CUDA specific core helper functions"""
 
+import os
+
 from cphct.io import create_path_dir
 from cphct.cu import driver as cuda, compiler, gpuarray
 from cphct.log import logging
 from cphct.npycore import sqrt
 from cphct.misc import nextpow2
+
+
+def __get_gpu_device(gpu_context):
+    """
+    Extract GPU device handles from initialized CUDA contexts
+    
+    Parameters
+    ----------
+    gpu_context : Object
+        Initialized CUDA context
+      
+    Returns
+    -------
+    output : Object
+       Returns gpu devices object
+    """
+
+    return gpu_context.get_device()
+
+
+def __get_gpu_specs(gpu_context):
+    """
+    Extract dictionary of GPU specs from initialized CUDA gpu contexts
+    
+    Parameters
+    ----------
+    gpu_context : Object
+        Initialized CUDA context
+
+    Returns
+    -------
+    output : dict
+       Returns gpu devices specs dictionary
+    """
+
+    specs = __get_gpu_device(gpu_context).get_attributes()
+    return dict([(str(i), j) for (i, j) in specs.items()])
+
+
+def __switch_active_gpu(conf, gpu_id):
+    """
+    This activates the GPU with *gpu_id* deactivating the previous active GPU if any.
+    Because the CUDA driver only allows a CPU process to communicate with a single
+    GPU at a time, this is necessary if using multiple GPUs from a single CPU processes.
+    
+    Parameters
+    ----------
+    conf : dict
+        Configuration dictionary.
+
+    Returns
+    -------
+    output : dict
+        Returns configuration dictionary with active GPU set 
+    """
+
+    if 'active_id' in conf['gpu'] and conf['gpu']['active_id'] \
+        == gpu_id:
+        pass
+    else:
+
+        # Deactive current active GPU if set
+
+        old_active_context = __get_active_gpu_context(conf)
+        if not old_active_context is None:
+            old_active_context.pop()
+
+        # Set new active gpu id
+
+        conf['gpu']['active_id'] = gpu_id
+        new_active_context = __get_active_gpu_context(conf)
+
+        # Activate context
+
+        new_active_context.push()
+
+    return conf
+
+
+def __get_active_gpu_context(conf):
+    """
+    Returns the context of the active GPU device
+    
+    Parameters
+    ----------
+    gpu_context : Object
+        Initialized CUDA context
+
+    Returns
+    -------
+    output : Object
+        Returns the active CUDA context, 
+        if not set *None* is returned
+    """
+
+    gpu_context = None
+
+    if 'active_id' in conf['gpu']:
+        gpu_id = conf['gpu']['active_id']
+        gpu_context = conf['gpu']['context'][gpu_id]
+
+    return gpu_context
 
 
 def gpu_init_mod(conf):
@@ -50,8 +154,8 @@ def gpu_init_mod(conf):
         Returns configuration dictionary with GPU module handle inserted.
     """
 
-    conf['gpu_module'] = cuda
-    conf['gpu_module'].init()
+    conf['gpu']['module'] = cuda
+    conf['gpu']['module'].init()
     return conf
 
 
@@ -69,10 +173,27 @@ def gpu_init_ctx(conf):
         Returns configuration dictionary with GPU context handle inserted.
     """
 
-    conf['gpu_context'] = conf['gpu_module'
-                               ].Device(conf['cuda_device_index'
-            ]).make_context()
-    conf['gpu_context'].push()
+    gpu_module = conf['gpu']['module']
+    cuda_device_index = conf['cuda_device_index']
+
+    # Use tempdir for the CUDA compute cache documented in CUDA Toolkit Docs
+
+    os.environ["CUDA_CACHE_PATH"] = os.path.join(conf["temporary_directory"],
+                                                 '.nv', 'ComputeCache')
+
+    conf['gpu']['context'] = {}
+    conf['gpu']['context'][cuda_device_index] = \
+        gpu_module.Device(cuda_device_index).make_context()
+
+    __switch_active_gpu(conf, cuda_device_index)
+
+    # We expect that all initialized GPU devices are the same
+    # NOTE: When making support for multiple GPUs we must
+    #       introduce a check for this here
+
+    conf['gpu']['specs'] = \
+        __get_gpu_specs(__get_active_gpu_context(conf))
+
     return conf
 
 
@@ -91,49 +212,26 @@ def gpu_exit(conf):
         Returns configuration dictionary with GPU handles cleared.
     """
 
-    if conf['gpu_module'] and conf['gpu_context']:
-        conf['gpu_context'].pop()
-        conf['gpu_context'].detach()
+    if 'active_id' in conf['gpu']:
+        logging.debug('De-activating GPU: %s' % conf['gpu']['active_id'
+                      ])
+        __get_active_gpu_context(conf).pop()
+        del conf['gpu']['active_id']
 
-    conf['gpu_context'] = None
-    conf['gpu_module'] = None
+    if 'context' in conf['gpu']:
+        for gpu_id in conf['gpu']['context']:
+            logging.debug('Detaching context for GPU: %s' % gpu_id)
+            conf['gpu']['context'][gpu_id].detach()
+
+        del conf['gpu']['context']
+
+    if 'specs' in conf['gpu']:
+        del conf['gpu']['specs']
+
+    if 'module' in conf['gpu']:
+        del conf['gpu']['module']
 
     return conf
-
-
-def get_gpu_device(gpu_context):
-    """
-    Extract GPU device handle from initialized CUDA gpu_context
-    
-    Parameters
-    ----------
-    gpu_context : Object
-        Initialized CUDA context
-      
-    Returns
-    -------
-    output : Object
-       Returns gpu device object
-    """
-    return gpu_context.get_device()
-
-
-def get_gpu_specs(gpu_context):
-    """
-    Extract dictionary of GPU specs from initialized CUDA gpu_context
-    
-    Parameters
-    ----------
-    gpu_context : Object
-        Initialized CUDA context
-      
-    Returns
-    -------
-    output : dict
-       Returns gpu device specs dictionary
-    """
-    specs = get_gpu_device(gpu_context).get_attributes()
-    return dict([(str(i), j) for (i, j) in specs.items()])
 
 
 def log_gpu_specs(conf):
@@ -145,13 +243,18 @@ def log_gpu_specs(conf):
         Configuration dictionary.
     """
 
-    gpu_device = get_gpu_device(conf['gpu_context'])
-    logging.info('using GPU %d: %s' % (conf['cuda_device_index'],
-                 gpu_device.name()))
-    logging.debug('GPU specs:')
-    gpu_attrs = get_gpu_specs(conf['gpu_context'])
+    logging.debug('***************** GPU Specifications *****************'
+                  )
+    for gpu_id in conf['gpu']['context']:
+        gpu_context = conf['gpu']['context'][gpu_id]
+        gpu_device = __get_gpu_device(gpu_context)
+        logging.info('GPU %d: %s' % (gpu_id, gpu_device.name()))
+
+    gpu_attrs = conf['gpu']['specs']
     for (key, val) in gpu_attrs.items():
         logging.debug('%s: %s' % (key, val))
+    logging.debug('******************************************************'
+                  )
 
 
 def replace_constants(text, remap, wrap=False):
@@ -259,6 +362,11 @@ def generate_gpu_init(conf, rt_const):
 /* --- BEGIN AUTOMATIC RUNTIME CONFIGURATION --- */
 
 '''
+    for name in conf['gpu']['specs']:
+        output += '''#define rt_gpu_specs_%s (%d)
+''' % (name,
+                conf['gpu']['specs'][name])
+
     for name in rt_const['int']:
         output += '''#define rt_%s ((int)%d)
 ''' % (name, conf[name])
@@ -449,6 +557,54 @@ def gpu_alloc_from_array(gpuarray_obj):
     return mem_chunk
 
 
+def gpu_pointer_from_array(gpuarray_obj):
+    """Extract memory pointer to raw memory allocation 
+    from GPUArray object to e.g. offset GPU memory.
+
+    Parameters
+    ----------
+    gpuarray_obj : GPUArray
+        A previously GPUArray wrapped linear chunk of device memory.
+
+    Returns
+    -------
+    output : int
+        Returns the address of the underlying raw memory allocation 
+        for gpuarray_obj.
+    """
+
+    pointer = gpuarray_obj.ptr
+    return pointer
+
+
+def gpu_array_alloc_offset(gpuarray_obj, offset, shape):
+    """Offsets the raw memory allocation associated with 
+    *gpuarray_obj* by *offset* elements.
+
+    Parameters
+    ----------
+    gpuarray_obj : GPUArray
+        A previously GPUArray wrapped linear chunk of device memory.
+    offset : int
+        Offset GPUAarray elements in the flat memory space.
+    shape : tuple
+        Shape of the offsat GPUArray.
+        
+    Returns
+    -------
+    output : GPUArray
+        Returns *gpuarray_obj* offsat by *byteoffset*
+    """
+
+    byteoffset = offset * gpuarray_obj.dtype.itemsize
+    gpuarray_obj_offsat_ptr = gpu_pointer_from_array(gpuarray_obj) \
+        + byteoffset
+    offsat_gpuarray_obj = gpu_array_from_alloc(gpuarray_obj_offsat_ptr,
+            shape, gpuarray_obj.dtype)
+
+    return offsat_gpuarray_obj
+
+
 def get_gpu_layout(rows, cols, max_gpu_threads_pr_block):
     """
     Get GPU block layout based on rows and cols,
@@ -489,9 +645,9 @@ def get_gpu_layout(rows, cols, max_gpu_threads_pr_block):
 
     block_xdim = nextpow2(int(round(sqrt(gpu_thread_pr_block / (rows
                           / cols)))))
-    
-    while block_xdim > gpu_thread_pr_block or \
-              (cols % block_xdim != 0 and block_xdim > 1.0):
+
+    while block_xdim > gpu_thread_pr_block or cols % block_xdim != 0 \
+        and block_xdim > 1.0:
         block_xdim /= 2
 
     if block_xdim < 1.0:
@@ -514,3 +670,5 @@ def get_gpu_layout(rows, cols, max_gpu_threads_pr_block):
 
     return ((int(block_xdim), int(block_ydim), 1), (int(grid_xdim),
             int(grid_ydim), 1))
+
+

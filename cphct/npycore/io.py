@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # io - numpy core specific input/ouput helpers
-# Copyright (C) 2011-2012  The Cph CT Toolbox Project lead by Brian Vinter
+# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -1045,5 +1045,4 @@ def npy_free_all(conf, garbage_collect=True):
     """
 
     return engine_free_all(conf, 'npy_data', garbage_collect)
-
 

@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # base - cuda specific katsevich reconstruction kernels
-# Copyright (C) 2011-2012  The CT-Toolbox Project lead by Brian Vinter
+# Copyright (C) 2011-2013  The CT-Toolbox Project lead by Brian Vinter
 #
 # This file is part of CT-Toolbox.
 #
@@ -31,14 +31,15 @@
 
 from cphct.log import logging
 
-# These are basic numpy functions exposed through npy to use same numpy
+# These are basic numpy functions exposed through npycore to use same numpy
 
 from cphct.npycore import int32, sqrt
 
 
 def filter_chunk(
-    first,
-    last,
+    chunk_index,
+    first_proj,
+    last_proj,
     input_array,
     diff_array,
     rebin_array,
@@ -48,16 +49,18 @@ def filter_chunk(
     conf,
     ):
     """Run filter on chunk of projections keeping the filtered projections
-    in output_array. The first and last argument are projection indices for the
-    first and last input projections. The differentiation step uses an extra
-    projection, so filtering produces filtered projections with indices from
-    first to last-1.
+    in output_array. The first_proj and last_proj argument are projection
+    indices for the first and last input projections. The differentiation step
+    uses an extra projection, so filtering produces filtered projections with
+    indices from first_proj to last_proj - 1.
 
     Parameters
     ----------
-    first : int
+    chunk_index : int
+        Index of chunk in chunked backprojection.
+    first_proj : int
         Index of first projection to include in chunked filtering.
-    last : int
+    last_proj : int
         Index of last projection to include in chunked filtering.
     input_array : gpuarray
         Input array.
@@ -80,7 +83,10 @@ def filter_chunk(
         Filtering time.
     """
 
-    cuda = conf['gpu_module']
+    cuda = conf['gpu']['module']
+    gpu_layouts = conf['app_state']['gpu']['layouts']
+    rebin_block, rebin_grid = gpu_layouts['rebin']
+    proj_block, proj_grid = gpu_layouts['proj']
     if conf['detector_shape'] == 'flat':
         diff_chunk = conf['compute']['kernels']['flat_diff_chunk']
         fwd_rebin_chunk = conf['compute']['kernels']['flat_fwd_rebin_chunk']
@@ -91,55 +97,24 @@ def filter_chunk(
         fwd_rebin_chunk = conf['compute']['kernels']['curved_fwd_rebin_chunk']
         convolve_chunk = conf['compute']['kernels']['curved_convolve_chunk']
         rev_rebin_chunk = conf['compute']['kernels']['curved_rev_rebin_chunk']
-    chunk_projs = last - first
 
-    # We want to divide work so that thread warps access a sequential slice of
-    # memory, i.e. pixels in the same column. Thus we use first index inside
-    # thread blocks for column index and leave rows and projs to fill the rest.
-
-    # Layouts are calculated for a single projection so we scale grids to fit
-    gpu_layouts = conf['app_state']['gpu']['layouts']
-    rebin_block, _ = filter_block, _ = gpu_layouts['proj_filter']
-    # GPUs with compute capability 2.0+ and CUDA 4.0+ support 3D grids.
-    # Fall back to more compute intensive packed index calculation.
-    # GPU typically has x-dim >= y-dim >= z-dim support so fit to order
-    #       ... we expect detector_rows >= detector_columns >= chunk_projs
-    gpu_specs = conf['app_state']['gpu']['specs']
-    if gpu_specs['MAX_GRID_DIM_Z'] >= 1:
-        logging.debug('using 3D gpu grid')
-        filter_grid = (conf['detector_columns'] / filter_block[0],
-                       conf['detector_rows'] / filter_block[1],
-                       chunk_projs)
-        rebin_grid = (conf['detector_columns'] / rebin_block[0],
-                      conf['detector_rebin_rows'] / rebin_block[1],
-                      chunk_projs)
-    else:
-        filter_grid = (conf['detector_columns'] * conf['detector_rows']
-                       / (filter_block[0] * filter_block[1]), chunk_projs)
-        rebin_grid = (conf['detector_columns'] * conf['detector_rebin_rows']
-                      / (rebin_block[0] * rebin_block[1]), chunk_projs)
-    logging.debug('filter kernels with layout %s %s'
-                 % (filter_block, filter_grid))
-    logging.debug('rebin kernels with layout %s %s' % (rebin_block,
-                 rebin_grid))
-    
     # We keep data on the gpu for efficiency
 
     chunk_time = 0.0
     diff_time = diff_chunk(
-        int32(first),
-        int32(last),
+        int32(first_proj),
+        int32(last_proj),
         input_array,
         diff_array,
-        block=filter_block,
-        grid=filter_grid,
+        block=proj_block,
+        grid=proj_grid,
         time_kernel=True,
         )
     cuda.Context.synchronize()
     chunk_time += diff_time
     fwd_rebin_time = fwd_rebin_chunk(
-        int32(first),
-        int32(last),
+        int32(first_proj),
+        int32(last_proj),
         diff_array,
         rebin_array,
         block=rebin_block,
@@ -149,8 +124,8 @@ def filter_chunk(
     cuda.Context.synchronize()
     chunk_time += fwd_rebin_time
     convolve_time = convolve_chunk(
-        int32(first),
-        int32(last),
+        int32(first_proj),
+        int32(last_proj),
         rebin_array,
         hilbert_array,
         conv_array,
@@ -161,12 +136,12 @@ def filter_chunk(
     cuda.Context.synchronize()
     chunk_time += convolve_time
     rev_rebin_time = rev_rebin_chunk(
-        int32(first),
-        int32(last),
+        int32(first_proj),
+        int32(last_proj),
         conv_array,
         output_array,
-        block=filter_block,
-        grid=filter_grid,
+        block=proj_block,
+        grid=proj_grid,
         time_kernel=True,
         )
     cuda.Context.synchronize()
@@ -178,8 +153,11 @@ def filter_chunk(
 
 
 def backproject_chunk(
-    first,
-    last,
+    chunk_index,
+    first_proj,
+    last_proj,
+    first_z,
+    last_z,
     input_array,
     row_mins_array,
     row_maxs_array,
@@ -191,10 +169,16 @@ def backproject_chunk(
 
     Parameters
     ----------
-    first : int
+    chunk_index : int
+        Index of chunk in chunked backprojection.
+    first_proj : int
         Index of first projection to include in chunked backprojection.
-    last : int
+    last_proj : int
         Index of last projection to include in chunked backprojection.
+    first_z : int
+        Index of first z voxels to include in chunked backprojection.
+    last_z : int
+        Index of last z voxels to include in chunked backprojection.
     input_array : gpuarray
         Input array.
     row_mins_array : gpuarray
@@ -212,38 +196,20 @@ def backproject_chunk(
         Backprojection time.
     """
 
-    cuda = conf['gpu_module']
+    cuda = conf['gpu']['module']
+    gpu_layouts = conf['app_state']['gpu']['layouts']
+    backproject_block, backproject_grid = gpu_layouts['backproject']
     if conf['detector_shape'] == 'flat':
         backproject_chunk = conf['compute']['kernels']['flat_backproj_chunk']
     elif conf['detector_shape'] == 'curved':
         backproject_chunk = conf['compute']['kernels']['curved_backproj_chunk']
 
-    # We want to divide work so that thread warps access a sequential slice of
-    # memory, i.e. voxels in adjacent z positions. However it turns out that
-    # iterating fastest over y and then z significantly improves performance.
-
-    # Layouts are calculated for a single slice so we scale grids to fit
-    gpu_layouts = conf['app_state']['gpu']['layouts']
-    backproject_block, _ = gpu_layouts['backproject']
-    # GPUs with compute capability 2.0+ and CUDA 4.0+ support 3D grids.
-    # Fall back to slightly more compute intensive packed index calculation.
-    # GPU typically has x-dim >= y-dim >= z-dim support so fit to order
-    #       ... we expect x_voxels >= y_voxels >= chunk_size
-    gpu_specs = conf['app_state']['gpu']['specs']
-    if gpu_specs['MAX_GRID_DIM_Z'] >= 1:
-        backproject_grid = (conf['x_voxels'],
-                            conf['y_voxels'] / backproject_block[1],
-                            conf['chunk_size'] / backproject_block[0])
-    else:
-        backproject_grid = (conf['x_voxels'],
-                            conf['chunk_size'] * conf['y_voxels']
-                            / (backproject_block[0] * backproject_block[1]))
-    logging.debug('backproject kernel with layout %s %s'
-                 % (backproject_block, backproject_grid))
-    
     chunk_time = backproject_chunk(
-        int32(first),
-        int32(last),
+        int32(chunk_index),
+        int32(first_proj),
+        int32(last_proj),
+        int32(first_z),
+        int32(last_z),
         input_array,
         row_mins_array,
         row_maxs_array,

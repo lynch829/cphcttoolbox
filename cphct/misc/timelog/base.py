@@ -50,8 +50,9 @@ def __barrier(conf):
        Dictionary with configuration values. 
     """
 
-    if conf['gpu_context']:
-        conf['gpu_context'].synchronize()
+    if 'context' in conf['gpu']:
+        for gpu_id in conf['gpu']['context']:
+            conf['gpu']['context'][gpu_id].synchronize()
 
     return conf
 

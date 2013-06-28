@@ -27,15 +27,14 @@
 # -- END_HEADER ---
 #
 
-"""Cuda specific kernel initialization helper functions"""
-
 from cphct.log import logging
 from cphct.npycore import allowed_data_types
 from cphct.npycore.io import npy_alloc, get_npy_data
 from cphct.npycore.misc import linear_coordinates
 from cphct.cu.io import cu_alloc
 from cphct.cu.core import gpuarray, get_gpu_layout
-from cphct.cone.fdk.npycore.kernels import generate_combined_matrix
+from cphct.cone.fdk.npycore.kernels import generate_combined_matrix, \
+    generate_detector_boundingboxes
 import pyfft.cuda
 
 # Runtime constant variables for use in kernels - keep order in sync with gpu
@@ -161,14 +160,27 @@ def init_recon(conf, fdt):
 
     # Get gpu module handle
 
-    gpu_module = conf['gpu_module']
+    gpu_module = conf['gpu']['module']
+
+    # Get detector boundingboxes for each recon chunk
+
+    detector_boundingboxes = generate_detector_boundingboxes(conf, fdt)
+    npy_alloc(conf, 'detector_boundingboxes', detector_boundingboxes)
+
+    # Find the maximal number of detector rows covered by a single recon chunk
+
+    max_proj_rows = int((detector_boundingboxes[:, 0, 1]
+                        - detector_boundingboxes[:, 0, 0]).max())
+    conf['app_state']['projs']['max_rows'] = max_proj_rows
+
+    # Generate GPU layouts for each processing task
 
     conf['app_state']['gpu']['layouts'] = {}
 
     (conf['app_state']['gpu']['layouts']['proj'], conf['app_state'
      ]['gpu']['layouts']['proj_filter'], conf['app_state']['gpu'
      ]['layouts']['backproject']) = __get_gpu_layouts(
-        conf['detector_rows'],
+        max_proj_rows,
         conf['detector_columns'],
         conf['proj_filter_width'],
         conf['x_voxels'],
@@ -176,7 +188,14 @@ def init_recon(conf, fdt):
         conf['gpu_target_threads'],
         )
 
-    # Allocate memory transform_matrix on GPU
+    # Allocate memory for detector_offset
+
+    gpu_proj_row_offset = gpuarray.zeros(1,
+            dtype=allowed_data_types['uint32'])
+    cu_alloc(conf, 'proj_row_offset', gpu_proj_row_offset,
+             gpu_proj_row_offset.nbytes)
+
+    # Allocate memory for the transform_matrix on GPU
 
     gpu_transform_matrix = gpuarray.zeros((3, 4), dtype=fdt)
     cu_alloc(conf, 'transform_matrix', gpu_transform_matrix,
@@ -236,13 +255,16 @@ def init_recon(conf, fdt):
     # Allocate pinned memory for projection data, please note that this is a
     # *host* memory allocation even though we use gpu_module call.
 
-    projs_data = gpu_module.pagelocked_zeros((1, conf['detector_rows'],
-            conf['detector_columns']), dtype=fdt)
+    projs_data = gpu_module.pagelocked_zeros((conf['proj_chunk_size'],
+            conf['detector_rows'], conf['detector_columns']), dtype=fdt)
+
     npy_alloc(conf, 'projs_data', projs_data)
 
-    gpu_projs_data = gpuarray.zeros((1, conf['detector_rows'],
+    gpu_projs_data = gpuarray.zeros((conf['proj_chunk_size'],
+                                    max_proj_rows,
                                     conf['detector_columns']),
                                     dtype=fdt)
+
     cu_alloc(conf, 'projs_data', gpu_projs_data, gpu_projs_data.nbytes)
 
     # Allocate memory for fft projection on GPU,
@@ -250,7 +272,7 @@ def init_recon(conf, fdt):
     # therefore the memory consumption is doubled
     # in order to contain both a real and imaginary part each float
 
-    gpu_complex_proj = gpuarray.zeros((conf['detector_rows'],
+    gpu_complex_proj = gpuarray.zeros((max_proj_rows,
             conf['proj_filter_width']), dtype=cdt)
     cu_alloc(conf, 'complex_proj', gpu_complex_proj,
              gpu_complex_proj.nbytes)
@@ -259,6 +281,7 @@ def init_recon(conf, fdt):
 
     fft_plan = pyfft.cuda.Plan(conf['proj_filter_width'], dtype=cdt,
                                fast_math=True)
+
     conf['app_state']['gpu']['fft_plan'] = fft_plan
 
     # Allocate memory for chunk index

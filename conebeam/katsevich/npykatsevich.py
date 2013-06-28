@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # npykatsevich - numpy katsevich reconstruction
-# Copyright (C) 2011-2012  The CT-Toolbox Project lead by Brian Vinter
+# Copyright (C) 2011-2013  The CT-Toolbox Project lead by Brian Vinter
 #
 # This file is part of CT-Toolbox.
 #
@@ -43,6 +43,7 @@ from cphct.npycore import pi, cos, arctan, ceil
 from cphct.npycore.io import save_auto
 from cphct.npycore.io import npy_free_all, get_npy_data, \
     get_npy_total_size
+from cphct.npycore.misc import slide_forward
 from cphct.npycore.utils import log_checksum
 from cphct.plugins import load_plugins, execute_plugin
 from cphct.cone.katsevich.conf import default_katsevich_npy_conf, \
@@ -133,16 +134,19 @@ def reconstruct_volume(conf, npy_plugins):
     filter_in = get_npy_data(conf, 'filter_in')
     filter_diff = get_npy_data(conf, 'filter_diff')
     filter_rebin = get_npy_data(conf, 'filter_rebin')
+    hilbert_ideal = get_npy_data(conf, 'hilbert_ideal')
     filter_conv = get_npy_data(conf, 'filter_conv')
     filter_out = get_npy_data(conf, 'filter_out')
     input_buffer = get_npy_data(conf, 'input_buffer')
     input_chunk = get_npy_data(conf, 'input_chunk')
+    proj_row_mins = get_npy_data(conf, 'proj_row_mins')
+    proj_row_maxs = get_npy_data(conf, 'proj_row_maxs')
     output_chunk = get_npy_data(conf, 'output_chunk')
 
     logging.debug('using about %db of host memory'
                   % get_npy_total_size(conf))
 
-    (last_filtered, first_filtered) = (-1, -1)
+    (last_filtered, first_filtered) = (-1, 0)
 
     # Keep output files open for chunked writing
 
@@ -199,7 +203,7 @@ def reconstruct_volume(conf, npy_plugins):
             # Shift already filtered projs for reuse
 
             logging.debug('shift projs %d' % buffer_switch)
-            input_buffer[:-buffer_switch] = input_buffer[buffer_switch:]
+            slide_forward(input_buffer, buffer_switch)
 
         # reuse already filtered projections and just continue from there
 
@@ -308,11 +312,13 @@ def reconstruct_volume(conf, npy_plugins):
                 (filter_conv[:], filter_out[:]) = (0, 0)
                 timelog.log(conf, 'verbose', 'core_filter',
                             start_time=0.0, end_time=filter_chunk(
+                    chunk,
                     in_first,
                     in_last,
                     filter_in,
                     filter_diff,
                     filter_rebin,
+                    hilbert_ideal,            
                     filter_conv,
                     filter_out,
                     conf,
@@ -381,7 +387,8 @@ def reconstruct_volume(conf, npy_plugins):
 
         timelog.set(conf, 'verbose', 'core_backproject')
 
-        backproject_chunk(first_proj, last_proj, input_chunk,
+        backproject_chunk(chunk, first_proj, last_proj, first_z, last_z,
+                          input_chunk, proj_row_mins, proj_row_maxs,
                           output_chunk, conf)
 
         log_time = timelog.log(conf, 'verbose', 'core_backproject')

@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # io - cuda specific input/ouput helpers
-# Copyright (C) 2011-2012  The Cph CT Toolbox Project lead by Brian Vinter
+# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -32,7 +32,29 @@
 from cphct.io import expand_path
 from cphct.cone.cu.io import fill_cone_cu_conf
 from cphct.cone.katsevich.npycore.io import fill_katsevich_npycore_conf
+from cphct.npycore import sqrt
 
+
+def __get_smallest_scaler(value):
+    """Returns a the smallest integer value that value can be downscaled with.
+    All integer values from 2 up to the squareroot of value are tested in
+    turn. If none of them are divisors of value it returns 1.
+
+    Parameters
+    ----------
+    value : int
+        Value to find smallest divisor greater than 1 for
+
+    Returns
+    -------
+    output : int
+        Returns the smallest possible scale integer for value.
+    """
+
+    for i in xrange(2, int(sqrt(value))+1):
+        if value % i == 0:
+            return i
+    return 1
 
 def fill_katsevich_cu_conf(conf):
     """Remaining configuration after handling command line options.
@@ -62,24 +84,37 @@ def fill_katsevich_cu_conf(conf):
     if conf['precision'] != 'float32':
         raise ValueError('cukatsevich only supports \'float32\'')
 
+    proj_bytes = fdt(0.0).nbytes * conf['detector_rows'] * \
+               conf['detector_columns']
+
     # Override default filter chunk size to fit in GPU mem
     # We use 5 filtering buffers
 
-    size = 5 * fdt(0.0).nbytes * conf['detector_rows'] * \
-               conf['detector_columns']
+    size = 5 * proj_bytes
     keep_going = True
     while keep_going:
         keep_going = False
         if size * conf['filter_out_projs'] > conf['gpu_target_filter_memory']:
-            for scale in (2, 3, 5):
-                if conf['filter_out_projs'] % scale == 0:
-                    conf['filter_out_projs'] /= scale
-                    keep_going = True
-                    break
-    #print "DEBUG: using buf size %d (%d)" % (size * conf['filter_out_projs'])
-    #print "DEBUG: using filter out projs %d" % (conf['filter_out_projs'])
+            scaler = __get_smallest_scaler(conf['filter_out_projs'])
+            if scaler > 1:
+                conf['filter_out_projs'] /= scaler
+                keep_going = True
 
     conf['filter_in_projs'] = conf['filter_out_projs'] \
         + conf['extra_filter_projs']
+
+    conf['backproject_in_projs'] = conf['chunk_projs']
+
+    # Override default backproject projection chunk size to fit in GPU mem
+
+    size = 1 * proj_bytes
+    keep_going = True
+    while keep_going:
+        keep_going = False
+        if size * conf['backproject_in_projs'] > conf['gpu_target_input_memory']:
+            scaler = __get_smallest_scaler(conf['backproject_in_projs'])
+            if scaler > 1:
+                conf['backproject_in_projs'] /= scaler
+                keep_going = True
 
     return conf

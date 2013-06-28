@@ -36,7 +36,8 @@ from incorrectly moving following comments above module doc string'''
 # Functions available from cphct.cone.fdk.npycore.kernels
 
 from cphct.cone.fdk.npycore.kernels.initialize import init_recon, \
-    generate_proj_weight_matrix, generate_combined_matrix
+    generate_combined_matrix
+from cphct.cone.fdk.npycore.kernels.base import generate_proj_weight_matrix
 from cphct.cone.fdk.npycore.kernels.base import generate_transform_matrix, \
     reconstruct_proj
 

@@ -30,11 +30,11 @@
 """Numpy specific kernel initialization helper functions"""
 
 from cphct.log import logging
-from cphct.npycore import pi, zeros, empty, arange, sin, cos, tan, \
+from cphct.npycore import pi, zeros, arange, sin, cos, tan, \
     arctan
 from cphct.npycore.io import npy_alloc, get_npy_data, get_npy_size
 from cphct.cu.io import cu_alloc, get_cu_data
-from cphct.cu.core import get_gpu_layout, get_gpu_specs
+from cphct.cu.core import get_gpu_layout
 from cphct.npycore.misc import linear_coordinates
 
 # Runtime constant variables for use in kernels - keep order in sync with gpu
@@ -127,19 +127,18 @@ def __get_gpu_layouts(
     # Create projection gpu_layout:
     # iterate over columns for memory coalescing
 
-    gpu_proj_layout = get_gpu_layout(proj_height, proj_width,
-            max_gpu_threads_pr_block)
+    gpu_rebin_layout = get_gpu_layout(proj_height, proj_width,
+                                      max_gpu_threads_pr_block)
 
-    logging.debug('gpu_proj_layout: %s' % str(gpu_proj_layout))
+    logging.debug('gpu_rebin_layout: %s' % str(gpu_rebin_layout))
 
     # Create projection filter gpu_layout:
     # iterate over columns for memory coalescing
 
-    gpu_proj_filter_layout = get_gpu_layout(proj_height,
-            proj_width, max_gpu_threads_pr_block)
+    gpu_proj_layout = get_gpu_layout(proj_height, proj_width,
+                                     max_gpu_threads_pr_block)
 
-    logging.debug('gpu_proj_filter_layout: %s'
-                  % str(gpu_proj_filter_layout))
+    logging.debug('gpu_proj_layout: %s' % str(gpu_proj_layout))
 
     # Create backprojection Layout:
     # iterate over z for memory coalescing
@@ -147,10 +146,58 @@ def __get_gpu_layouts(
     gpu_backproject_layout = get_gpu_layout(y_voxels, chunk_size,
             max_gpu_threads_pr_block)
 
-    logging.debug('gpu_backproject_layout: %s'
-                  % str(gpu_backproject_layout))
+    logging.debug('gpu_backproject_layout: %s' % str(gpu_backproject_layout))
+    
 
-    return (gpu_proj_layout, gpu_proj_filter_layout,
+    # We want to divide work so that thread warps access a sequential slice of
+    # memory, i.e. pixels/voxels in the same column. Thus for filtering we use
+    # first index inside thread blocks for column index and leave rows and
+    # projs to fill the rest. Similarly we iterate fastest over z then y and x
+    # to improve performance.
+
+    # Layouts are calculated for a single projection so we scale grids to fit
+
+    rebin_block, rebin_grid = gpu_rebin_layout
+    proj_block, proj_grid = gpu_proj_layout
+    backproject_block, backproject_grid = gpu_backproject_layout
+
+    # GPUs with compute capability 2.0+ and CUDA 4.0+ support 3D grids.
+    # Fall back to more compute intensive packed index calculation.
+    # GPU typically has x-dim >= y-dim >= z-dim support so fit to order
+    #       ... we expect detector_rows >= detector_columns >= chunk_projs
+    #       ... and x_voxels >= y_voxels >= chunk_size
+    
+    gpu_specs = conf['gpu']['specs']
+    if gpu_specs['MAX_GRID_DIM_Z'] >= 1:
+        logging.debug('using 3D gpu grid')
+        proj_grid = (conf['detector_columns'] / proj_block[0],
+                     conf['detector_rows'] / proj_block[1],
+                     conf['filter_out_projs'])
+        rebin_grid = (conf['detector_columns'] / rebin_block[0],
+                      conf['detector_rebin_rows'] / rebin_block[1],
+                      conf['filter_out_projs'])
+        backproject_grid = (conf['x_voxels'],
+                            conf['y_voxels'] / backproject_block[1],
+                            conf['chunk_size'] / backproject_block[0])
+    else:
+        proj_grid = (conf['detector_columns'] * conf['detector_rows']
+                       / (proj_block[0] * proj_block[1]), conf['chunk_projs'])
+        rebin_grid = (conf['detector_columns'] * conf['detector_rebin_rows']
+                      / (rebin_block[0] * rebin_block[1]), conf['chunk_projs'])
+        backproject_grid = (conf['x_voxels'],
+                            conf['chunk_size'] * conf['y_voxels']
+                            / (backproject_block[0] * backproject_block[1]))
+    logging.debug('filter kernels with layout %s %s' % (proj_block,
+                                                        proj_grid))
+    logging.debug('rebin kernels with layout %s %s' % (rebin_block,
+                                                       rebin_grid))
+    logging.debug('backproject kernels with layout %s %s' % (backproject_block,
+                                                             backproject_grid))
+    gpu_rebin_layout = (rebin_block, rebin_grid)
+    gpu_proj_layout = (proj_block, proj_grid)
+    gpu_backproject_layout = (backproject_block, backproject_grid)
+
+    return (gpu_rebin_layout, gpu_proj_layout,
             gpu_backproject_layout)
 
 def init_recon(conf, fdt):
@@ -177,12 +224,12 @@ def init_recon(conf, fdt):
 
     # Get gpu module handle
 
-    gpu_module = conf['gpu_module']
+    gpu_module = conf['gpu']['module']
     
     conf['app_state']['gpu']['layouts'] = {}
 
-    (conf['app_state']['gpu']['layouts']['proj'], conf['app_state'
-     ]['gpu']['layouts']['proj_filter'], conf['app_state']['gpu'
+    (conf['app_state']['gpu']['layouts']['rebin'], conf['app_state'
+     ]['gpu']['layouts']['proj'], conf['app_state']['gpu'
      ]['layouts']['backproject']) = __get_gpu_layouts(
         conf,
         conf['detector_rows'],
@@ -193,7 +240,6 @@ def init_recon(conf, fdt):
         conf['chunk_size'],
         conf['gpu_target_threads'],
         )
-    conf['app_state']['gpu']['specs'] = get_gpu_specs(conf['gpu_context'])
 
     # Create z voxel coordinate array
 
@@ -304,9 +350,10 @@ def init_recon(conf, fdt):
     npy_alloc(conf, 'proj_row_mins', proj_row_mins)
     npy_alloc(conf, 'proj_row_maxs', proj_row_maxs)
 
-    # Matrices for storage in host memory
+    # Matrices for storage in host memory - init with zeros to make sure they
+    # are fully initialized for mem size checks
 
-    npy_alloc(conf, 'filter_in', empty((conf['filter_in_projs'],
+    npy_alloc(conf, 'filter_in', zeros((conf['filter_in_projs'],
               conf['detector_rows'], conf['detector_columns']),
               dtype=fdt))
 
@@ -314,31 +361,35 @@ def init_recon(conf, fdt):
     # ...we could use just two of filter_out size and alternate between them
     # that would save us quite some gpu mem but make checksum a bit cumbersome
 
-    # use empty() for now - they must be reset in loops anyway
-
-    npy_alloc(conf, 'filter_diff', empty((conf['filter_out_projs'],
+    npy_alloc(conf, 'filter_diff', zeros((conf['filter_out_projs'],
               conf['detector_rows'], conf['detector_columns']),
               dtype=fdt))
-    npy_alloc(conf, 'filter_rebin', empty((conf['filter_out_projs'],
+    npy_alloc(conf, 'filter_rebin', zeros((conf['filter_out_projs'],
               conf['detector_rebin_rows'], conf['detector_columns']),
               dtype=fdt))
-    npy_alloc(conf, 'filter_conv', empty((conf['filter_out_projs'],
+    npy_alloc(conf, 'filter_conv', zeros((conf['filter_out_projs'],
               conf['detector_rebin_rows'], conf['detector_columns']),
               dtype=fdt))
-    npy_alloc(conf, 'filter_out', empty((conf['filter_out_projs'],
+    npy_alloc(conf, 'filter_out', zeros((conf['filter_out_projs'],
               conf['detector_rows'], conf['detector_columns']),
               dtype=fdt))
 
     # Buffer filtered results for use in back projection
     # Make sure input buffer can hold chunk projs and one rotation on each side
+    # We use input_projs for storing the projections for a backprojection chunk
+    # in host memory and input_chunk for the projections used by a single
+    # backprojection step.
 
     input_buffer_projs = (2 + conf['chunk_projs']
                           / conf['projs_per_turn']) \
         * conf['projs_per_turn']
-    npy_alloc(conf, 'input_buffer', empty((input_buffer_projs,
+    npy_alloc(conf, 'input_buffer', zeros((input_buffer_projs,
               conf['detector_rows'], conf['detector_columns']),
               dtype=fdt))
-    npy_alloc(conf, 'input_chunk', empty((conf['chunk_projs'],
+    npy_alloc(conf, 'input_projs', zeros((conf['chunk_projs'],
+              conf['detector_rows'], conf['detector_columns']),
+              dtype=fdt))
+    npy_alloc(conf, 'input_chunk', zeros((conf['backproject_in_projs'],
               conf['detector_rows'], conf['detector_columns']),
               dtype=fdt))
     npy_alloc(conf, 'output_chunk', zeros((conf['x_voxels'],

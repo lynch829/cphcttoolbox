@@ -388,6 +388,7 @@ def fill_base_conf(conf):
 
     conf['app_state'] = {}
     conf['app_state']['projs'] = {}
+    conf['app_state']['backproject'] = {}
 
     conf['cphcttoolbox_base'] = \
         os.path.dirname(os.path.dirname(__file__))

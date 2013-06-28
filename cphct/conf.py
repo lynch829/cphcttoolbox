@@ -909,6 +909,9 @@ def _cu_opts():
     # gpu_target_filter_memory is a helper to split up filtering into
     # reasonably small chunks to fit in GPU memory.
 
+    # gpu_target_input_memory is a helper to split up backprojection input into
+    # reasonably small chunks to fit in GPU memory.
+
     # gpu_projs_only is a helper to indicate if projs can be kept on the gpu
     # all the time.
     # Only copy filtered projections back to host for debug and saving.
@@ -964,6 +967,15 @@ def _cu_opts():
             'default': 256*2**20,
             'description': 'GPU memory in bytes to aim for with projection ' \
                 + 'filter chunking',
+            },
+        'gpu_target_input_memory': {
+            'long': 'gpu-target-input-memory',
+            'short': None,
+            'args': int,
+            'handler': int_value,
+            'default': 128*2**20,
+            'description': 'GPU memory in bytes to aim for as input for ' \
+                + 'backprojection chunking',
             },
         'gpu_projs_only': {
             'long': 'gpu-projs-only',
@@ -1028,21 +1040,13 @@ def _cu_opts():
             'default': [],
             'description': 'List of variables to auto remap in cuda kernel',
             },
-        'gpu_module': {
+        'gpu': {
             'long': None,
             'short': None,
-            'args': str,
-            'handler': str_value,
-            'default': '',
-            'description': 'CUDA module handle for internal use',
-            },
-        'gpu_context': {
-            'long': None,
-            'short': None,
-            'args': str,
-            'handler': str_value,
-            'default': '',
-            'description': 'CUDA context handle for internal use',
+            'args': None,
+            'handler': None,
+            'default': {},
+            'description': 'GPU handle for internal use',
             },
         }
 

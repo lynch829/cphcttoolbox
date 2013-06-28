@@ -181,7 +181,7 @@ def load_input(
 
     # Use in-place update to projs_list and projs_data
 
-    (input_meta[:], input_data[:]) = load_projs_chunk(
+    (load_meta, load_data) = load_projs_chunk(
         conf['app_state']['projs']['first'],
         conf['app_state']['projs']['last'],
         conf['working_directory'],
@@ -194,6 +194,9 @@ def load_input(
         __plugin_state__['prefiltered_projs'],
         )
 
+    input_meta[:] = load_meta
+    input_data[:load_data.shape[0]] = load_data
+    
     return (input_data, input_meta)
 
 

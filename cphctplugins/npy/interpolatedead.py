@@ -66,15 +66,13 @@ def plugin_init(conf, dead_pixels):
 
     # Fill dead pixels
 
-    proj_shape = (conf['detector_rows'], conf['detector_columns'])
-
     if dead_pixels == 'dead_pixels':
-        dead_pixels = get_plugin_var(conf, 'dead_pixels')
+        dead_pixels_matrix = get_plugin_var(conf, 'dead_pixels')
     else:
-        dead_pixels = load_helper_proj(dead_pixels, conf,
+        dead_pixels_matrix = load_helper_proj(dead_pixels, conf,
                 conf['input_data_type'])
 
-    __plugin_state__['dead_pixels'] = dead_pixels
+    __plugin_state__['dead_pixels'] = dead_pixels_matrix
 
 
 def plugin_exit(conf, dead_pixels):
@@ -123,7 +121,7 @@ def preprocess_input(
         Returns a 2-tuple of the array of stacked projections and input_meta.
     """
 
-    # Retrieve initialized norm matrices
+    # Retrieve initialized dead pixel matrix
 
     dead_pixels = __plugin_state__['dead_pixels']
 

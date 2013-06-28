@@ -121,7 +121,27 @@ def preprocess_input(
         raise ValueError('invalid dump preprocess input array')
 
     dump_file = __plugin_state__['dump_file']
-    dump_array(gpu_input_data.get(), dump_file)
+    first_proj = conf['app_state']['projs']['first']
+    last_proj = conf['app_state']['projs']['last']
+    detector_rows = conf['detector_rows']
+    detector_columns = conf['detector_columns']
+
+    start_row = 0
+    end_row = detector_rows
+    if 'boundingbox' in conf['app_state']['projs']:
+        start_row = conf['app_state']['projs']['boundingbox'][0, 0]
+        end_row = conf['app_state']['projs']['boundingbox'][0, 1]
+    dump_row_count = end_row - start_row
+
+    dump_data = gpu_input_data.get()
+
+    for proj_idx in xrange(first_proj, last_proj + 1):
+        offset = (proj_idx * detector_rows * detector_columns
+                  + detector_columns * start_row) \
+            * dump_data.dtype.itemsize
+        dump_file.seek(offset)
+        dump_array(dump_data[:, :dump_row_count], dump_file)
+
     return (gpu_input_data, input_meta)
 
 

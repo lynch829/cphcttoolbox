@@ -25,13 +25,16 @@
 #
 */
 
+
 /* Constants */
 
-#define PROJ_SIZE (rt_detector_rows*rt_detector_columns)
+#define DETECTOR_SIZE (rt_detector_rows*rt_detector_columns)
+
 
 /* Flat indexing macros */
 
 #define PROJ_IDX(y,x) (y*rt_detector_columns+x)
+
 
 /* 
  * Convert stacked intensity measurement data values from intensity/flux
@@ -41,12 +44,9 @@
  * values.
  */
 
-// Because the GPUs use out-of-order block exection
-// we need to use a proj_data copy 'tmp_proj_data'
-// when using air_ref_pixel
 #ifdef plugin_rt_air_ref_pixel_idx
 __global__ void flux2proj(float *proj_data,
-			  float *tmp_proj_data,
+			  float *proj_ref_pixel_vals,
 			  unsigned int *proj_count,
 			  float *zero_norm,
 			  float *air_norm) {
@@ -66,6 +66,7 @@ __global__ void flux2proj(float *proj_data,
    float air_val = air_norm[pixel_idx];
    float pixel_val;
    
+   
 #ifdef plugin_rt_air_ref_pixel_idx
    unsigned int air_ref_idx = plugin_rt_air_ref_pixel_idx;
    float air_val_diff;
@@ -76,7 +77,7 @@ __global__ void flux2proj(float *proj_data,
    for (i=0; i<*proj_count; i++) {
       
 #ifdef plugin_rt_air_ref_pixel_idx
-      air_val_diff = air_val_ref - tmp_proj_data[air_ref_idx];
+      air_val_diff = air_val_ref - proj_ref_pixel_vals[i];
       pixel_val = logf(init_air_val - air_val_diff - zero_val) -
 	          logf(proj_data[pixel_idx] - zero_val);
       
@@ -96,8 +97,8 @@ __global__ void flux2proj(float *proj_data,
       proj_data[pixel_idx] = pixel_val;
       
 #ifdef plugin_rt_air_ref_pixel_idx  
-      air_ref_idx += PROJ_SIZE;
+      air_ref_idx += DETECTOR_SIZE;
 #endif
-      pixel_idx += PROJ_SIZE;  
+      pixel_idx += plugin_rt_proj_size;
    }
 }

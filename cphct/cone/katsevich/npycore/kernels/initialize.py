@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # initialize - numpy specific initialization helpers
-# Copyright (C) 2011-2012  The Cph CT Toolbox Project lead by Brian Vinter
+# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -30,7 +30,7 @@
 """Numpy specific kernel initialization helper functions"""
 
 from cphct.log import logging
-from cphct.npycore import pi, zeros, ones, empty, arange, sin, cos, tan, \
+from cphct.npycore import pi, zeros, ones, arange, sin, cos, tan, \
     arctan, int32
 from cphct.npycore.io import npy_alloc, get_npy_data
 from cphct.npycore.misc import linear_coordinates
@@ -162,24 +162,23 @@ def init_recon(conf, fdt):
     npy_alloc(conf, 'proj_row_mins', proj_row_mins)
     npy_alloc(conf, 'proj_row_maxs', proj_row_maxs)
 
-    # Matrices for storage in host memory
+    # Matrices for storage in host memory - init with zeros to make sure they
+    # are fully initialized for mem size checks
 
-    npy_alloc(conf, 'filter_in', empty((conf['filter_in_projs'],
+    npy_alloc(conf, 'filter_in', zeros((conf['filter_in_projs'],
               conf['detector_rows'], conf['detector_columns']),
               dtype=fdt))
 
-    # use empty() for now - they must be reset in loops anyway
-
-    npy_alloc(conf, 'filter_diff', empty((conf['filter_out_projs'],
+    npy_alloc(conf, 'filter_diff', zeros((conf['filter_out_projs'],
               conf['detector_rows'], conf['detector_columns']),
               dtype=fdt))
-    npy_alloc(conf, 'filter_rebin', empty((conf['filter_out_projs'],
+    npy_alloc(conf, 'filter_rebin', zeros((conf['filter_out_projs'],
               conf['detector_rebin_rows'], conf['detector_columns']),
               dtype=fdt))
-    npy_alloc(conf, 'filter_conv', empty((conf['filter_out_projs'],
+    npy_alloc(conf, 'filter_conv', zeros((conf['filter_out_projs'],
               conf['detector_rebin_rows'], conf['detector_columns']),
               dtype=fdt))
-    npy_alloc(conf, 'filter_out', empty((conf['filter_out_projs'],
+    npy_alloc(conf, 'filter_out', zeros((conf['filter_out_projs'],
               conf['detector_rows'], conf['detector_columns']),
               dtype=fdt))
 
@@ -189,10 +188,10 @@ def init_recon(conf, fdt):
     input_buffer_projs = (2 + conf['chunk_projs']
                           / conf['projs_per_turn']) \
         * conf['projs_per_turn']
-    npy_alloc(conf, 'input_buffer', empty((input_buffer_projs,
+    npy_alloc(conf, 'input_buffer', zeros((input_buffer_projs,
               conf['detector_rows'], conf['detector_columns']),
               dtype=fdt))
-    npy_alloc(conf, 'input_chunk', empty((conf['chunk_projs'],
+    npy_alloc(conf, 'input_chunk', zeros((conf['chunk_projs'],
               conf['detector_rows'], conf['detector_columns']),
               dtype=fdt))
     npy_alloc(conf, 'output_chunk', zeros((conf['x_voxels'],

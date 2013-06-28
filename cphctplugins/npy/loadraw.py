@@ -245,8 +245,7 @@ def load_input(
     progress_filepath=None,
     progress_dtype='float32',
     ):
-    """Load projections with meta data from a scene file and optionally
-    override the actual projections with ones from a binary dump.
+    """Load projections with meta data
 
     Parameters
     ----------
@@ -300,19 +299,19 @@ def load_input(
     load_shape = (nr_projs, projs_shape[0], projs_shape[1])
     load_items = nr_projs * projs_items
 
-    input_data[:] = load_projs(projs_file, load_shape, projs_dtype,
-                               projs_dtype, items=load_items)
+    input_data[:nr_projs] = load_projs(projs_file, load_shape,
+            projs_dtype, projs_dtype, items=load_items)
 
     # Generate meta data
 
-    input_meta[:] = [{}] * (last_proj - first_proj + 1)
-    for proj_idx in xrange(first_proj, last_proj + 1):
-        input_meta[last_proj - proj_idx]['angle'] = \
-            angles_data[proj_idx]
-        input_meta[last_proj - proj_idx]['filtered'] = prefiltered_projs
+    input_meta[:] = []
+    for meta_idx in xrange(last_proj - first_proj + 1):
+        input_meta.append({})
+        proj_idx = first_proj + meta_idx
+        input_meta[meta_idx]['angle'] = angles_data[proj_idx]
+        input_meta[meta_idx]['filtered'] = prefiltered_projs
         if progress_data is not None:
-            input_meta[last_proj - proj_idx]['progress'] = \
-                progress_data[proj_idx]
+            input_meta[meta_idx]['progress'] = progress_data[proj_idx]
 
     return (input_data, input_meta)
 

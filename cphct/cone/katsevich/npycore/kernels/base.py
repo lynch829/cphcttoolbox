@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # base - numpy specific katsevich reconstruction kernels
-# Copyright (C) 2011-2012  The CT-Toolbox Project lead by Brian Vinter
+# Copyright (C) 2011-2013  The CT-Toolbox Project lead by Brian Vinter
 #
 # This file is part of CT-Toolbox.
 #
@@ -29,12 +29,11 @@
 
 """Spiral cone beam CT kernels using the Katsevich algorithm"""
 
-import os
 import time
 
 from cphct.log import logging
 
-# These are basic numpy functions exposed through numpyext to use same numpy
+# These are basic numpy functions exposed through npycore to use same numpy
 
 from cphct.npycore import zeros, zeros_like, arange, int32, sin, cos, \
     arctan, sqrt, interp, convolve, clip, floor, ceil
@@ -322,6 +321,7 @@ def flat_conv_chunk_vector(
     first,
     last,
     input_array,
+    hilbert_array,
     output_array,
     conf,
     ):
@@ -337,6 +337,8 @@ def flat_conv_chunk_vector(
         Last projection to convolve.
     input_array : ndarray
         Input array.
+    hilbert_array : ndarray
+        Hilbert convolution helper array.
     output_array : ndarray
         Output array.
     conf : dict
@@ -351,7 +353,6 @@ def flat_conv_chunk_vector(
     before_conv = time.time()
     detector_columns = conf['detector_columns']
     detector_rebin_rows = conf['detector_rebin_rows']
-    hilbert_ideal = get_npy_data(conf, 'hilbert_ideal')
 
     # TODO: use rectangular hilbert window as suggested in Noo paper?
 
@@ -360,9 +361,9 @@ def flat_conv_chunk_vector(
         for rebin_row in xrange(detector_rebin_rows):
 
             # use convolve for now instead of manual convolution sum
-            # yields len(hilbert_ideal)+detector_columns-1 elements
+            # yields len(hilbert_array)+detector_columns-1 elements
 
-            filter_conv = convolve(hilbert_ideal, input_array[proj,
+            filter_conv = convolve(hilbert_array, input_array[proj,
                                    rebin_row, :])
 
             # only use central elements of convolution
@@ -595,6 +596,7 @@ def curved_conv_chunk_vector(
     first,
     last,
     input_array,
+    hilbert_array,
     output_array,
     conf,
     ):
@@ -610,6 +612,8 @@ def curved_conv_chunk_vector(
         Last projection to convolve.
     input_array : ndarray
         Input array.
+    hilbert_array : ndarray
+        Hilbert convolution helper array.
     output_array : ndarray
         Output array.
     conf : dict
@@ -623,7 +627,7 @@ def curved_conv_chunk_vector(
 
     # Identical to flat case
 
-    return flat_conv_chunk_vector(first, last, input_array,
+    return flat_conv_chunk_vector(first, last, input_array, hilbert_array,
                                   output_array, conf)
 
 
@@ -674,9 +678,14 @@ def curved_rev_rebin_chunk_single(
 
 
 def flat_backproject_chunk(
-    first,
-    last,
+    chunk_index,
+    first_proj,
+    last_proj,
+    first_z,
+    last_z,
     input_array,
+    row_mins_array,
+    row_maxs_array,
     output_array,
     conf,
     ):
@@ -685,12 +694,22 @@ def flat_backproject_chunk(
 
     Parameters
     ----------
-    first : int
-        First projection to backproject.
-    last : int
-        Last projection to backproject.
+    chunk_index : int
+        Index of chunk in chunked backprojection.
+    first_proj : int
+        Index of first projection to include in chunked backprojection.
+    last_proj : int
+        Index of last projection to include in chunked backprojection.
+    first_z : int
+        Index of first z voxels to include in chunked backprojection.
+    last_z : int
+        Index of last z voxels to include in chunked backprojection.
     input_array : ndarray
         Input array.
+    row_mins_array : ndarray
+        Row interpolation helper array.
+    row_maxs_array : ndarray
+        Row interpolation helper array.
     output_array : ndarray
         Output array.
     conf : dict
@@ -706,9 +725,7 @@ def flat_backproject_chunk(
 
     # Limit to actual projection sources in chunk
 
-    source_pos = get_npy_data(conf, 'source_pos')[first:last + 1]
-    proj_row_mins = get_npy_data(conf, 'proj_row_mins')
-    proj_row_maxs = get_npy_data(conf, 'proj_row_maxs')
+    source_pos = get_npy_data(conf, 'source_pos')[first_proj:last_proj + 1]
     scan_radius = conf['scan_radius']
     scan_diameter = conf['scan_diameter']
     x_min = conf['x_min']
@@ -730,13 +747,6 @@ def flat_backproject_chunk(
     detector_row_shift = conf['detector_row_shift']
     progress_per_radian = conf['progress_per_radian']
 
-    # TODO: pass (tuple of) all four chunk values to functions instead?
-    # Find z-range from projection boundaries
-
-    chunk_index = first / conf['chunk_projs_offset']
-    chunk_z_start = conf['chunk_size'] * chunk_index
-    chunk_z_end = min(z_voxels, conf['chunk_size'] * (chunk_index + 1))
-    chunk_z_last = chunk_z_end - 1
     (prev_proj, cur_proj, next_proj) = range(3)
 
     # Calculate x, y and squared coordinates once and for all
@@ -768,10 +778,10 @@ def flat_backproject_chunk(
                                % (
                     x,
                     y,
-                    chunk_z_start,
-                    chunk_z_last,
-                    first,
-                    last,
+                    first_z,
+                    last_z,
+                    first_proj,
+                    last_proj,
                     ))
 
             # Constant helper arrays for this particular (x,y) and all angles.
@@ -830,17 +840,17 @@ def flat_backproject_chunk(
             # Interpolate nearest precalculated neighbors in limit row coords.
             # They are used as row coordinate boundaries for z loop and in
             # boundary weigths.
-            # Please note that proj_row_mins/maxs are built from the extended
+            # Please note that row_mins/maxs are built from the extended
             # col coords so that they include one extra element to allow this
             # interpolation even for the last valid column index,
             # (detector_columns-1)
 
             proj_row_coord_mins = (1 - proj_col_fracs) \
-                * proj_row_mins[proj_col_ints] + proj_col_fracs \
-                * proj_row_mins[proj_col_ints + 1]
+                * row_mins_array[proj_col_ints] + proj_col_fracs \
+                * row_mins_array[proj_col_ints + 1]
             proj_row_coord_maxs = (1 - proj_col_fracs) \
-                * proj_row_maxs[proj_col_ints] + proj_col_fracs \
-                * proj_row_maxs[proj_col_ints + 1]
+                * row_maxs_array[proj_col_ints] + proj_col_fracs \
+                * row_maxs_array[proj_col_ints + 1]
 
             # Use row projection formula to calculate z limits from row limits
 
@@ -857,8 +867,8 @@ def flat_backproject_chunk(
                             / delta_z).astype(int32)
             z_lasts = floor((z_coord_maxs - z_min)
                             / delta_z).astype(int32)
-            for proj_index in xrange(first, last):
-                proj = proj_index - first
+            for proj_index in xrange(first_proj, last_proj):
+                proj = proj_index - first_proj
 
                 # Reset proj_row_coords triple to first row coordinates before
                 # each z loop.
@@ -878,15 +888,14 @@ def flat_backproject_chunk(
                     * delta_z
                 proj_row_coords[cur_proj] = proj_row_coord_z_min[proj] \
                     + z_firsts[proj] * proj_row_steps[cur_proj]
-                if proj < last - 1:
+                if proj < last_proj - 1:
                     proj_row_steps[next_proj] = \
                         proj_row_coord_diffs[proj + 1] * delta_z
                     proj_row_coords[next_proj] = \
                         proj_row_coord_z_min[proj + 1] + z_firsts[proj] \
                         * proj_row_steps[next_proj]
-                if z_coord_maxs[proj] < z_min + chunk_z_start * delta_z \
-                    or z_coord_mins[proj] > z_min + chunk_z_last \
-                    * delta_z:
+                if z_coord_maxs[proj] < z_min + first_z * delta_z \
+                    or z_coord_mins[proj] > z_min + last_z * delta_z:
                     continue
                 if x == debug_x and y == debug_y:
                     logging.debug('loop (%d, %d, %d:%d) proj %d %f:%f'
@@ -915,10 +924,10 @@ def flat_backproject_chunk(
                     # Skip out of bounds indices here to avoid border weighting
                     # on boundary clipped index values
 
-                    if z < chunk_z_start or z > chunk_z_last:
+                    if z < first_z or z > last_z:
                         continue
                     z_coord = z_min + z * delta_z
-                    z_local = z - chunk_z_start
+                    z_local = z - first_z
 
                     # Border weight only applies for first and last z
 
@@ -1016,9 +1025,14 @@ def flat_backproject_chunk(
 
 
 def curved_backproject_chunk(
-    first,
-    last,
+    chunk_index,
+    first_proj,
+    last_proj,
+    first_z,
+    last_z,
     input_array,
+    row_mins_array,
+    row_maxs_array,
     output_array,
     conf,
     ):
@@ -1027,12 +1041,22 @@ def curved_backproject_chunk(
 
     Parameters
     ----------
-    first : int
-        First projection to backproject.
-    last : int
-        Last projection to backproject.
+    chunk_index : int
+        Index of chunk in chunked backprojection.
+    first_proj : int
+        Index of first projection to include in chunked backprojection.
+    last_proj : int
+        Index of last projection to include in chunked backprojection.
+    first_z : int
+        Index of first z voxels to include in chunked backprojection.
+    last_z : int
+        Index of last z voxels to include in chunked backprojection.
     input_array : ndarray
         Input array.
+    row_mins_array : ndarray
+        Row interpolation helper array.
+    row_maxs_array : ndarray
+        Row interpolation helper array.
     output_array : ndarray
         Output array.
     conf : dict
@@ -1048,9 +1072,7 @@ def curved_backproject_chunk(
 
     # Limit to actual projection sources in chunk
 
-    source_pos = get_npy_data(conf, 'source_pos')[first:last + 1]
-    proj_row_mins = get_npy_data(conf, 'proj_row_mins')
-    proj_row_maxs = get_npy_data(conf, 'proj_row_maxs')
+    source_pos = get_npy_data(conf, 'source_pos')[first_proj:last_proj + 1]
     scan_radius = conf['scan_radius']
     scan_diameter = conf['scan_diameter']
     x_min = conf['x_min']
@@ -1072,13 +1094,6 @@ def curved_backproject_chunk(
     detector_row_shift = conf['detector_row_shift']
     progress_per_radian = conf['progress_per_radian']
 
-    # TODO: pass (tuple of) all four chunk values to functions instead?
-    # Find z-range from projection boundaries
-
-    chunk_index = first / conf['chunk_projs_offset']
-    chunk_z_start = conf['chunk_size'] * chunk_index
-    chunk_z_end = min(z_voxels, conf['chunk_size'] * (chunk_index + 1))
-    chunk_z_last = chunk_z_end - 1
     (prev_proj, cur_proj, next_proj) = range(3)
 
     # Calculate x, y and squared coordinates once and for all
@@ -1110,10 +1125,10 @@ def curved_backproject_chunk(
                                % (
                     x,
                     y,
-                    chunk_z_start,
-                    chunk_z_last,
-                    first,
-                    last,
+                    first_z,
+                    last_z,
+                    first_proj,
+                    last_proj,
                     ))
 
             # Constant helper arrays for this particular (x,y) and all angles.
@@ -1177,17 +1192,17 @@ def curved_backproject_chunk(
             # Interpolate nearest precalculated neighbors in limit row coords.
             # They are used as row coordinate boundaries for z loop and in
             # boundary weigths.
-            # Please note that proj_row_mins/maxs are built from the extended
+            # Please note that row_mins/maxs are built from the extended
             # col coords so that they include one extra element to allow this
             # interpolation even for the last valid column index,
             # (detector_columns-1)
 
             proj_row_coord_mins = (1 - proj_col_fracs) \
-                * proj_row_mins[proj_col_ints] + proj_col_fracs \
-                * proj_row_mins[proj_col_ints + 1]
+                * row_mins_array[proj_col_ints] + proj_col_fracs \
+                * row_mins_array[proj_col_ints + 1]
             proj_row_coord_maxs = (1 - proj_col_fracs) \
-                * proj_row_maxs[proj_col_ints] + proj_col_fracs \
-                * proj_row_maxs[proj_col_ints + 1]
+                * row_maxs_array[proj_col_ints] + proj_col_fracs \
+                * row_maxs_array[proj_col_ints + 1]
 
             # Use row projection formula to calculate z limits from row limits
 
@@ -1206,8 +1221,8 @@ def curved_backproject_chunk(
                             / delta_z).astype(int32)
             z_lasts = floor((z_coord_maxs - z_min)
                             / delta_z).astype(int32)
-            for proj_index in xrange(first, last):
-                proj = proj_index - first
+            for proj_index in xrange(first_proj, last_proj):
+                proj = proj_index - first_proj
 
                 # Reset proj_row_coords triple to first row coordinates before
                 # each z loop.
@@ -1227,15 +1242,14 @@ def curved_backproject_chunk(
                     * delta_z
                 proj_row_coords[cur_proj] = proj_row_coord_z_min[proj] \
                     + z_firsts[proj] * proj_row_steps[cur_proj]
-                if proj < last - 1:
+                if proj < last_proj - 1:
                     proj_row_steps[next_proj] = \
                         proj_row_coord_diffs[proj + 1] * delta_z
                     proj_row_coords[next_proj] = \
                         proj_row_coord_z_min[proj + 1] + z_firsts[proj] \
                         * proj_row_steps[next_proj]
-                if z_coord_maxs[proj] < z_min + chunk_z_start * delta_z \
-                    or z_coord_mins[proj] > z_min + chunk_z_last \
-                    * delta_z:
+                if z_coord_maxs[proj] < z_min + first_z * delta_z \
+                    or z_coord_mins[proj] > z_min + last_z * delta_z:
                     continue
                 if x == debug_x and y == debug_y:
                     logging.debug('loop (%d, %d, %d:%d) proj %d %f:%f'
@@ -1264,10 +1278,10 @@ def curved_backproject_chunk(
                     # Skip out of bounds indices here to avoid border weighting
                     # on boundary clipped index values
 
-                    if z < chunk_z_start or z > chunk_z_last:
+                    if z < first_z or z > last_z:
                         continue
                     z_coord = z_min + z * delta_z
-                    z_local = z - chunk_z_start
+                    z_local = z - first_z
 
                     # Border weight only applies for first and last z
 
@@ -1365,25 +1379,30 @@ def curved_backproject_chunk(
 
 
 def filter_chunk(
-    first,
-    last,
+    chunk_index,
+    first_proj,
+    last_proj,
     input_array,
     diff_array,
     rebin_array,
+    hilbert_array,
     conv_array,
     output_array,
     conf,
     ):
-    """Run filter on chunk of projections keeping the result in output_array.
-    The first and last argument are projection indices for the first and last
-    input projections. The differentiation step uses an extra projection, so
-    filtering produces filtered projections with indices from first to last-1.
+    """Run filter on chunk of projections keeping the filtered projections
+    in output_array. The first and last argument are projection indices for the
+    first and last input projections. The differentiation step uses an extra
+    projection, so filtering produces filtered projections with indices from
+    first to last-1.
 
     Parameters
     ----------
-    first : int
+    chunk_index : int
+        Index of chunk in chunked backprojection.
+    first_proj : int
         Index of first projection to include in chunked filtering.
-    last : int
+    last_proj : int
         Index of last projection to include in chunked filtering.
     input_array : ndarray
         Input array.
@@ -1393,6 +1412,8 @@ def filter_chunk(
         Rebinning helper array.
     conv_array : ndarray
         Convolution helper array.
+    hilbert_array : ndarray
+        Hilbert convolution helper array.
     output_array : ndarray
         Output array.
     conf : dict
@@ -1429,19 +1450,22 @@ def filter_chunk(
 
         rev_rebin_chunk = curved_rev_rebin_chunk_single
 
+    logging.debug('filtering chunk %d with projections %d to %d' % \
+                  (chunk_index, first_proj, last_proj))
     before_chunk = time.time()
-    logging.debug('differentiating %d to %d of %d projections' % (first,
-                 last, len(input_array)))
-    diff_time = diff_chunk(first, last, input_array, diff_array, conf)
+    logging.debug('differentiating %d to %d of %d projections' % (first_proj,
+                 last_proj, len(input_array)))
+    diff_time = diff_chunk(first_proj, last_proj, input_array, diff_array,
+                           conf)
     logging.debug('finished diff kernel in %ss' % diff_time)
 
     # No more use for the extra projection from this point on
 
-    (out_first, out_last) = (first, last)
+    (out_first, out_last) = (first_proj, last_proj)
     fwd_rebin_time = fwd_rebin_chunk(out_first, out_last, diff_array,
             rebin_array, conf)
     logging.debug('finished fwd rebin kernel in %ss' % fwd_rebin_time)
-    conv_time = conv_chunk(out_first, out_last, rebin_array,
+    conv_time = conv_chunk(out_first, out_last, rebin_array, hilbert_array,
                            conv_array, conf)
     logging.debug('finished conv kernel in %ss' % conv_time)
     rev_rebin_time = rev_rebin_chunk(out_first, out_last, conv_array,
@@ -1454,9 +1478,14 @@ def filter_chunk(
 
 
 def backproject_chunk(
-    first,
-    last,
+    chunk_index,
+    first_proj,
+    last_proj,
+    first_z,
+    last_z,
     input_array,
+    row_mins_array,
+    row_maxs_array,
     output_array,
     conf,
     ):
@@ -1465,12 +1494,22 @@ def backproject_chunk(
 
     Parameters
     ----------
-    first : int
+    chunk_index : int
+        Index of chunk in chunked backprojection.
+    first_proj : int
         Index of first projection to include in chunked backprojection.
-    last : int
+    last_proj : int
         Index of last projection to include in chunked backprojection.
+    first_z : int
+        Index of first z voxels to include in chunked backprojection.
+    last_z : int
+        Index of last z voxels to include in chunked backprojection.
     input_array : ndarray
         Input array.
+    row_mins_array : ndarray
+        Row interpolation helper array.
+    row_maxs_array : ndarray
+        Row interpolation helper array.
     output_array : ndarray
         Output array.
     conf : dict
@@ -1486,4 +1525,6 @@ def backproject_chunk(
         backproj_chunk = flat_backproject_chunk
     elif conf['detector_shape'] == 'curved':
         backproj_chunk = curved_backproject_chunk
-    return backproj_chunk(first, last, input_array, output_array, conf)
+    return backproj_chunk(chunk_index, first_proj, last_proj, first_z, last_z,
+                          input_array, row_mins_array, row_maxs_array,
+                          output_array, conf)

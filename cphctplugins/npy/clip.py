@@ -68,6 +68,8 @@ def plugin_init(conf, clip_min, clip_max):
     max_val = float(clip_max)
     if min_val > max_val:
         raise ValueError('clip_min is greater than clip_max')
+    __plugin_state__['clip_min'] = min_val
+    __plugin_state__['clip_max'] = max_val
 
 
 def plugin_exit(conf, clip_min, clip_max):
@@ -125,7 +127,8 @@ def preprocess_input(
     if not hasattr(input_data, 'dtype'):
         raise ValueError('invalid clip preprocess input array')
 
-    return (clip_array(input_data, clip_min, clip_max, out=input_data),
+    return (clip_array(input_data, __plugin_state__['clip_min'],
+                       __plugin_state__['clip_max'], out=input_data),
             input_meta)
 
 
@@ -163,8 +166,9 @@ def postprocess_output(
     if not hasattr(output_data, 'dtype'):
         raise ValueError('invalid clip postprocess input array')
 
-    return (clip_array(output_data, clip_min, clip_max,
-            out=output_data), output_meta)
+    return (clip_array(output_data, __plugin_state__['clip_min'],
+                       __plugin_state__['clip_max'], out=output_data),
+            output_meta)
 
 
 if __name__ == '__main__':

@@ -30,6 +30,7 @@
 """Reset projection values plugin useful for debugging"""
 
 from cphct.npycore.io import load_helper_proj
+from cphct.plugins import get_plugin_var
 
 # Internal plugin state for individual plugin instances
 
@@ -50,7 +51,9 @@ def plugin_init(conf, reset_norm):
     conf : dict
         A dictionary of configuration options.
     reset_norm : str
-        Forced constant normalization value or file path
+        File path to reset pixel projection or single value. If
+        reset_norm='reset_norm' the reset norm pixels matrix is extracted from
+        shared plugin vars.
 
     Raises
     ------
@@ -61,8 +64,11 @@ def plugin_init(conf, reset_norm):
 
     # Fill reset norm
 
-    reset_norm_matrix = load_helper_proj(reset_norm, conf,
-            conf['input_data_type'])
+    if reset_norm == 'reset_norm':
+        reset_norm_matrix = get_plugin_var(conf, 'reset_norm')
+    else:
+        reset_norm_matrix = load_helper_proj(reset_norm, conf,
+                                             conf['input_data_type'])
     __plugin_state__['reset_norm'] = reset_norm_matrix
 
 
@@ -110,7 +116,7 @@ def preprocess_input(
         Returns a 2-tuple of the array of stacked projections and input_meta.
     """
 
-    # Retrieve initialized norm matrices
+    # Retrieve initialized norm matrix
 
     reset_norm = __plugin_state__['reset_norm']
 

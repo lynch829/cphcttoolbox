@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # io - numpy core specific input/ouput helpers
-# Copyright (C) 2011-2012  The Cph CT Toolbox Project lead by Brian Vinter
+# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -34,7 +34,7 @@ import os
 from cphct.conf import int_pow2_value
 from cphct.io import expand_path
 from cphct.misc import nextpow2
-from cphct.npycore import fromfile, tan, empty, pi
+from cphct.npycore import fromfile, tan, zeros, pi
 from cphct.npycore.io import npy_alloc
 from cphct.npycore.utils import supported_proj_filters, \
     generate_proj_filter
@@ -70,7 +70,7 @@ def __set_proj_weight_matrix(conf, fdt):
     if conf['proj_weight'] != 'skip':
 
         matrix_shape = (conf['detector_rows'], conf['detector_columns'])
-        proj_weight_matrix = empty(matrix_shape, dtype=fdt)
+        proj_weight_matrix = zeros(matrix_shape, dtype=fdt)
 
         if not conf['proj_weight']:
 
@@ -240,7 +240,7 @@ def __set_volume_weight_matrix(conf, fdt):
 
         matrix_shape = (conf['projs_per_turn'], conf['y_voxels'],
                         conf['x_voxels'])
-        volume_weight_matrix = empty(matrix_shape, dtype=fdt)
+        volume_weight_matrix = zeros(matrix_shape, dtype=fdt)
 
         if os.path.isfile(volume_weight_path):
             try:

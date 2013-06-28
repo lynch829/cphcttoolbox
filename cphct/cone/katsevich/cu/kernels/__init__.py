@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # init - cuda specific katsevich reconstruction kernels
-# Copyright (C) 2011-2012  The CT-Toolbox Project lead by Brian Vinter
+# Copyright (C) 2011-2013  The CT-Toolbox Project lead by Brian Vinter
 #
 # This file is part of CT-Toolbox.
 #

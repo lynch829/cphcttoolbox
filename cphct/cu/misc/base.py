@@ -84,7 +84,7 @@ def gpuarray_copy(conf, data, out=None):
         A copy of *data*
     """
 
-    gpu_module = conf['gpu_module']
+    gpu_module = conf['gpu']['module']
 
     if out is None:
         out = gpuarray.empty_like(data)

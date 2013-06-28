@@ -139,7 +139,8 @@ def preprocess_input(
     output : tuple of ndarray and dict
         Returns a 2-tuple of input_data and input_meta.
     """
-
+    
+    detector_rows = conf['detector_rows']
     memmap_data = __plugin_state__['memmap_data']
     flush = __plugin_state__['flush']
 
@@ -148,9 +149,16 @@ def preprocess_input(
     first_proj = conf['app_state']['projs']['first']
     last_proj = conf['app_state']['projs']['last']
 
-    for proj_idx in xrange(first_proj, last_proj + 1):
-        memmap_data[:, :, proj_idx] = input_data[proj_idx - first_proj]
+    start_row = 0
+    end_row = detector_rows
+    if 'boundingbox' in conf['app_state']['projs']:
+        start_row = conf['app_state']['projs']['boundingbox'][0, 0]
+        end_row = conf['app_state']['projs']['boundingbox'][0, 1]
 
+    for proj_idx in xrange(first_proj, last_proj + 1):
+        memmap_data[start_row:end_row, :, proj_idx] = \
+            input_data[proj_idx - first_proj, start_row:end_row]
+            
     if flush == True:
         memmap_data.flush()
 

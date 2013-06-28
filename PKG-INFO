@@ -1,12 +1,12 @@
 Metadata-Version: 1.1
 Name: cphcttoolbox
-Version: 1.0.2
+Version: 1.0.3
 Summary: Cph CT Toolbox is a selection of Computed Tomography tools
 Home-page: http://code.google.com/p/cphcttoolbox/
 Author: The Cph CT Toolbox maintainers
 Author-email: jonas DOT bardino AT gmail DOT com
 License: GNU GPL v2
-Download-URL: http://code.google.com/p/cphcttoolbox/downloads/list
+Download-URL: http://pypi.python.org/pypi/cphcttoolbox/
 Description: Copenhagen Computed Tomography Toolbox is a collection of
         applications and libraries for flexible and efficient CT reconstruction. The
         toolbox generally take a set of projections (X-ray intensity measurements) and

@@ -30,10 +30,11 @@
 """Step and shoot cone beam CT kernels using the FDK algorithm"""
 
 from cphct.npycore import radians, cos, sin, arctan, dot, divide, \
-    zeros, ones, array, hstack, vstack, ravel, fft, real, rint, int32
-
+    zeros, ones, array, hstack, vstack, fft, real, rint, int32, \
+    meshgrid, sqrt, allowed_data_types
 from cphct.npycore.io import get_npy_data, save_auto
 from cphct.npycore.utils import log_checksum
+from cphct.npycore.misc import linear_coordinates
 
 from cphct.log import logging
 from cphct.misc import timelog
@@ -81,10 +82,10 @@ def __rotation_matrix(
 
 def generate_transform_matrix(
     proj_angle_rad,
-    det_pixel_width,
-    det_pixel_height,
-    det_col_shift,
-    det_row_shift,
+    detector_pixel_width,
+    detector_pixel_height,
+    detector_column_shift,
+    detector_row_shift,
     source_distance,
     detector_distance,
     detector_shape,
@@ -103,13 +104,13 @@ def generate_transform_matrix(
     ----------
     proj_angle_rad : float
        Projection angle in radians
-    det_pixel_width : float
+    detector_pixel_width : float
        Detector pixel width in cm
-    det_pixel_height : float
+    detector_pixel_height : float
        Detector pixel height in cm
-    det_col_shift : float
+    detector_column_shift : float
        Center ray aligned pixel column shift
-    det_row_shift : float
+    detector_row_shift : float
        Center ray aligned pixel row shift
     source_distance : float
        Distance in cm from x-ray source to iso center
@@ -139,15 +140,15 @@ def generate_transform_matrix(
     # in the reconstruction process
 
     if detector_shape == 'flat':
-        inv_det_pixel_width = 1.0 / det_pixel_width
-        inv_det_pixel_height = 1.0 / det_pixel_height
-        pixel_row_shift = det_row_shift
-        pixel_col_shift = det_col_shift
+        inv_detector_pixel_width = 1.0 / detector_pixel_width
+        inv_detector_pixel_height = 1.0 / detector_pixel_height
+        pixel_row_shift = detector_row_shift
+        pixel_column_shift = detector_column_shift
     else:
-        inv_det_pixel_width = 1.0
-        inv_det_pixel_height = 1.0
+        inv_detector_pixel_width = 1.0
+        inv_detector_pixel_height = 1.0
         pixel_row_shift = 0
-        pixel_col_shift = 0
+        pixel_column_shift = 0
 
     # The rotation matrix is used to align the xray source and the detector
     # in the voxel coordinate system
@@ -187,9 +188,10 @@ def generate_transform_matrix(
     # and transform coordinates from centimeters to pixels
     # NOTE: flat detector shape only (see above)
 
-    pixel_remap = array([(inv_det_pixel_width, 0, pixel_col_shift), (0,
-                        inv_det_pixel_height, pixel_row_shift), (0, 0,
-                        1)], dtype=fdt)
+    pixel_remap = array([(inv_detector_pixel_width, 0,
+                        pixel_column_shift), (0,
+                        inv_detector_pixel_height, pixel_row_shift),
+                        (0, 0, 1)], dtype=fdt)
 
     transform_matrix = dot(pixel_remap, transform_matrix)
 
@@ -203,6 +205,366 @@ def generate_transform_matrix(
     transform_matrix[cutoff_indexes] = 0.0
 
     return transform_matrix
+
+
+def generate_combined_matrix(
+    x_min,
+    x_max,
+    x_voxels,
+    y_min,
+    y_max,
+    y_voxels,
+    fdt,
+    ):
+    """
+    Generates a matrix containing the coordinates of all
+    x and y voxel combinations for a single z voxel coordinate.
+    Additional space is allocated for a dummy dimension needed
+    by dot products performed during reconstruction.
+
+    Parameters
+    ----------
+    x_min : float
+       Field of View minimum x coordinate in cm.
+    x_max : float
+       Field of View maximum x coordinate in cm.
+    x_voxels : int
+       Field of View resolution in x.
+    y_min : float
+       Field of View minimum y coordinate in cm.
+    y_max : float
+       Field of View maximum y coordinate in cm.
+    y_voxels : int
+       Field of View resolution in y.
+    fdt : type
+        Output filter data type.
+
+    Returns
+    -------
+    output : ndarray
+        Returns a combination of all *x_voxels* by *y_voxels* coordinate
+        positions with dtype *fdt*.
+    """
+
+    x_coords = linear_coordinates(x_min, x_max, x_voxels, True, fdt)
+    y_coords = linear_coordinates(y_min, y_max, y_voxels, True, fdt)
+
+    (y_coords_grid, x_coords_grid) = meshgrid(y_coords, x_coords)
+    (flat_y_coords_grid, flat_x_coords_grid) = \
+        (fdt(y_coords_grid.flatten('F')), fdt(x_coords_grid.flatten('F'
+         )))
+
+    # Allocate space for one slice, the z values are filled in
+    # when looping over slices in the reconstruction kernel
+
+    flat_z_coords_grid = zeros(len(flat_x_coords_grid), dtype=fdt)
+
+    # Dummy must be ones in order to get correct dot products
+    # in the reconstruction kernel
+
+    dummy = ones(len(flat_x_coords_grid), dtype=fdt)
+
+    combined_matrix = vstack([flat_x_coords_grid, flat_y_coords_grid,
+                             flat_z_coords_grid, dummy])
+
+    return combined_matrix
+
+
+def generate_detector_boundingboxes(conf, fdt):
+    """
+    Generate projection bounding boxes for each reconstruction chunk
+
+    Parameters
+    ----------
+    conf : dict
+        A dictionary of configuration options.
+    fdt : type
+       Output filter data type.
+
+    Returns
+    -------
+    output : ndarray
+        Returns a ndarray of shape (nr_chunks, 2, 2) with projection
+        [start_row,end_row*][*start_column,end_column] for each chunk
+        
+    """
+
+    detector_rows = conf['detector_rows']
+    detector_columns = conf['detector_columns']
+    detector_pixel_width = conf['detector_pixel_width']
+    detector_pixel_height = conf['detector_pixel_height']
+    detector_column_shift = conf['detector_column_shift']
+    detector_row_shift = conf['detector_row_shift']
+    source_distance = conf['source_distance']
+    detector_distance = conf['detector_distance']
+    detector_shape = conf['detector_shape']
+    x_min = conf['x_min']
+    x_max = conf['x_max']
+    y_min = conf['y_min']
+    y_max = conf['y_max']
+    z_min = conf['z_min']
+    z_max = conf['z_max']
+    z_voxels = conf['z_voxels']
+    chunk_size = conf['chunk_size']
+
+    # Use Pythagoras to calculate the farest corner of FoV
+    # We need to find the largest span of FoV which defines
+    # the largest cone-angle
+
+    maximum_x = max(abs(x_min), abs(x_max))
+    maximum_y = max(abs(y_min), abs(y_max))
+    fov_diagonal_radius = sqrt(maximum_x ** 2 + maximum_y ** 2)
+
+    # Use 3D projection: http://en.wikipedia.org/wiki/3D_projection
+    # to calculate the minimum and maximum row posistions for each chunk
+
+    # Generate the transform matrix used to project 3D voxels to 2D pixels
+    # We need to find the largest cone angle for each chunk.
+
+    # Using the FoV farest corner voxels with the found diagonal:
+    # (FoV_diagonal_radius, 0, Z_0) and (-FoV_diagonal_radius, 0, Z_1)
+    # provides the maximum cone angle for the chunk starting at Z_0 ending in Z_1.
+
+    proj_angle_rad = 0.0
+
+    transform_matrix = generate_transform_matrix(
+        proj_angle_rad,
+        detector_pixel_width,
+        detector_pixel_height,
+        detector_column_shift,
+        detector_row_shift,
+        source_distance,
+        detector_distance,
+        detector_shape,
+        fdt,
+        )
+
+    voxel_coordinate = vstack([[fov_diagonal_radius,
+                              -fov_diagonal_radius], [0, 0], [0, 0],
+                              [1, 1]])
+
+    chunks = z_voxels / chunk_size
+    chunk_size_cm = (z_max - z_min) / z_voxels * chunk_size
+
+    detector_boundingboxes = zeros((chunks, 2, 2),
+                                   dtype=allowed_data_types['uint32'])
+    detector_boundingboxes[:, 1, 0] = 0
+    detector_boundingboxes[:, 1, 1] = detector_columns
+
+    z_last = z_min
+
+    for chunk in xrange(chunks):
+        z_first = z_last
+        voxel_coordinate[2] = z_first
+
+        (map_first_rows, _) = project_voxels_to_pixels(conf,
+                transform_matrix, voxel_coordinate)
+
+        first_row = map_first_rows.min()
+        if first_row < 0:
+            first_row = 0
+
+        z_last = z_first + chunk_size_cm
+        voxel_coordinate[2] = z_last
+        (map_last_rows, _) = project_voxels_to_pixels(conf,
+                transform_matrix, voxel_coordinate)
+
+        last_row = map_last_rows.max()
+        if last_row < 0:
+            last_row = 0
+        elif last_row >= detector_rows:
+            last_row = detector_rows - 1
+
+        detector_boundingboxes[chunk, 0, 0] = first_row
+        detector_boundingboxes[chunk, 0, 1] = last_row + 1
+
+    return detector_boundingboxes
+
+
+def generate_proj_weight_matrix(
+    detector_rows,
+    detector_columns,
+    detector_row_shift,
+    detector_column_shift,
+    detector_pixel_height,
+    detector_pixel_width,
+    source_distance,
+    detector_distance,
+    detector_shape,
+    fdt,
+    ):
+    """Calculate the cone-beam flat or curved projection weight
+
+    Parameters
+    ----------
+    detector_rows : int
+       Number of pixel rows in projections
+    detector_columns : int
+       Number of pixel columns in projections
+    detector_row_shift : float
+       Center ray aligned pixel row shift
+    detector_column_shift : float
+       Center ray aligned pixel column shift
+    detector_pixel_height : float
+       Detector pixel height in cm
+    detector_pixel_width : float
+       Detector pixel width in cm
+    source_distance : float
+       Distance in cm from source to isocenter
+    detector_distance : float
+       Distance in cm from isocenter to detector
+    detector_shape : str
+       Shape of detector
+    fdt : dtype
+       Output proj_weight data type.
+
+    Returns
+    -------
+    output : ndarray
+        Returns a proj_weight matrix of *detector_rows* by *detector_columns*
+        with dtype *fdt*.
+    """
+
+    # From Henrik Turbell's Ph.D thesis:
+    #    link: http://www2.cvl.isy.liu.se/ScOut/Theses/PaperInfo/turbell01.html
+    #    link: http://www2.cvl.isy.liu.se/Research/Tomo/Turbell/abstract.html
+    #
+    #    Bibtex:
+    #       @PhdThesis{turbell01,
+    #       author  = {Henrik Turbell},
+    #       title   = {Cone-Beam Reconstruction Using Filtered Backprojection},
+    #       school  = {Link{\"o}ping University, Sweden},
+    #       year    = {2001},
+    #       month   = {February},
+    #       address = {SE-581 83 Link\"oping, Sweden},
+    #       node    = {Dissertation No. 672, ISBN 91-7219-919-9}
+    #       }
+
+    source_detector_distance = source_distance + detector_distance
+
+    # Detector pixel center coordinates in both directions, using coordinate
+    # system centered in the middle of the detector.
+
+    cols = (-detector_column_shift
+            + linear_coordinates(-detector_columns / 2.0,
+            detector_columns / 2.0, detector_columns, True, fdt)) \
+        * detector_pixel_width
+
+    rows = (-detector_row_shift + linear_coordinates(-detector_rows
+            / 2.0, detector_rows / 2.0, detector_rows, True, fdt)) \
+        * detector_pixel_height
+
+    if detector_shape == 'curved':
+
+        # Part of equation 3.9 Turbell
+
+        col_rads = abs(cols / source_detector_distance)
+        col_weight = cos(col_rads)
+
+        (col_weight_grid, row_grid) = meshgrid(col_weight, rows)
+
+        row_weight_grid = source_detector_distance \
+            / sqrt(source_detector_distance ** 2 + row_grid ** 2)
+
+        proj_weight_matrix = col_weight_grid * row_weight_grid
+    else:
+
+        # Equation 3.5 Turbell
+
+        (col_grid, row_grid) = meshgrid(cols, rows)
+        proj_weight_matrix = source_detector_distance \
+            / sqrt(source_detector_distance ** 2 + row_grid ** 2
+                   + col_grid ** 2)
+
+    return proj_weight_matrix
+
+
+def project_voxels_to_pixels(conf, transform_matrix, combined_matrix):
+    """Project 3D voxel coordinates to 2D pixel indexes
+    
+    Parameter
+    ---------
+    conf : dict
+        A dictionary of configuration options.
+    transform_matrix : ndarray
+       Matrix used to project 3D voxel coordinates
+       to pixel coordinates in the 2D detector plane
+    combined_matrix : ndarray
+       Matrix containing the combination of all voxel coordinates
+       in the x and y plane.
+    
+    Returns
+    -------
+    output : tuple
+       Tuple of (row, col) ndarrays with pixel coordinates
+    """
+
+    # Find the mapping between volume voxels and detector pixels
+
+    vol_det_map = dot(transform_matrix, combined_matrix)
+
+    flat_map_cols = divide(vol_det_map[0, :], vol_det_map[2, :])
+    flat_map_rows = divide(vol_det_map[1, :], vol_det_map[2, :])
+
+    if conf['detector_shape'] == 'curved':
+        source_distance = conf['source_distance']
+        detector_pixel_height = conf['detector_pixel_height']
+        detector_pixel_width = conf['detector_pixel_width']
+        detector_row_shift = conf['detector_row_shift']
+        detector_column_shift = conf['detector_column_shift']
+
+        # Find the xray angle between each detector column pixel
+        #
+        # By definition of tangens:
+        # ---------------------
+        # flat_map_cols = source_distance * tan(alpha)
+        # tan(alpha) = flat_map_cols/source_distance
+        # alpha = tan-1(flat_map_cols/source_distance)
+
+        alpha = arctan(divide(flat_map_cols, source_distance))
+
+        # By definition of an arc:
+        # http://en.wikipedia.org/wiki/Arc_%28geometry%29
+
+        curved_map_cols = source_distance * alpha
+
+        # Transform units from cm to pixels
+
+        curved_map_cols *= 1.0 / detector_pixel_width
+
+        # Offset to center in column direction
+
+        curved_map_cols += detector_column_shift
+
+        # From the paper:
+        # "Exact helical reconstruction using native cone-beam geometries"
+        # http://citeseerx.ist.psu.edu/viewdoc/download?\
+        #        doi=10.1.1.121.6008&rep=rep1&type=pdf
+
+        curved_map_rows = flat_map_rows * cos(alpha)
+
+        # Transform units from cm to pixels
+
+        curved_map_rows *= 1.0 / detector_pixel_height
+
+        # Offset to center in row direction
+
+        curved_map_rows += detector_row_shift
+
+        # Round and cast to int
+
+        map_cols_tmp = rint(curved_map_cols)
+        map_rows_tmp = rint(curved_map_rows)
+    else:
+        map_cols_tmp = rint(flat_map_cols)
+        map_rows_tmp = rint(flat_map_rows)
+
+    # rint returns float, convert to int
+
+    map_rows = map_rows_tmp.astype(int32)
+    map_cols = map_cols_tmp.astype(int32)
+
+    return (map_rows, map_cols)
 
 
 def generate_volume_weight(
@@ -307,8 +669,7 @@ def generate_volume_weight(
 def reconstruct_proj(
     conf,
     proj,
-    recon_chunk,
-    z_voxs_array,
+    z_voxels_array,
     fdt,
     ):
     """Reconstructs a single projection
@@ -316,25 +677,23 @@ def reconstruct_proj(
         A dictionary of configuration options.
     proj : dict
         Projection dictionary containing meta infomation and data
-    recon_chunk : ndarray
-        Reconstructed volume chunk
-    z_voxs_array : ndarray
+    z_voxels_array : ndarray
         Array of all Z voxel positions
     fdt : dtype
         Float precision
 
     Returns
     -------
-    output : ndarray
-        Three dimentional ndarray containing reconstructed chunk
+    output : dict
+        The dictionary of configuration options.
     """
 
     detector_columns = conf['detector_columns']
     detector_rows = conf['detector_rows']
-    det_pixel_width = conf['detector_pixel_width']
-    det_pixel_height = conf['detector_pixel_height']
-    det_col_shift = conf['detector_column_shift']
-    det_row_shift = conf['detector_row_shift']
+    detector_pixel_width = conf['detector_pixel_width']
+    detector_pixel_height = conf['detector_pixel_height']
+    detector_column_shift = conf['detector_column_shift']
+    detector_row_shift = conf['detector_row_shift']
     source_distance = conf['source_distance']
     detector_distance = conf['detector_distance']
     detector_shape = conf['detector_shape']
@@ -343,10 +702,12 @@ def reconstruct_proj(
     proj_weight_matrix = get_npy_data(conf, 'proj_weight_matrix')
     combined_matrix = get_npy_data(conf, 'combined_matrix')
     proj_filter_matrix = get_npy_data(conf, 'proj_filter_matrix')
+    recon_chunk = get_npy_data(conf, 'recon_chunk')
 
-    proj_angle_rad = proj['angle_rad']
-    proj_data = proj['data']
-    proj_index = proj['index']
+    proj_angle_rad = radians(fdt(proj['angle']))
+    proj_index = conf['app_state']['backproject']['proj_idx']
+    proj_data_index = proj_index - conf['app_state']['projs']['first']
+    proj_data = get_npy_data(conf, 'projs_data')[proj_data_index]
 
     if not proj['filtered']:
 
@@ -366,7 +727,6 @@ def reconstruct_proj(
 
         if conf['proj_filter'] != 'skip':
             timelog.set(conf, 'verbose', 'proj_filter')
-
             filtered_proj_freq = fft.fft(proj_data, proj_filter_width,
                     1) * proj_filter_matrix
 
@@ -403,10 +763,10 @@ def reconstruct_proj(
     timelog.set(conf, 'verbose', 'transform_matrix')
     transform_matrix = generate_transform_matrix(
         proj_angle_rad,
-        det_pixel_width,
-        det_pixel_height,
-        det_col_shift,
-        det_row_shift,
+        detector_pixel_width,
+        detector_pixel_height,
+        detector_column_shift,
+        detector_row_shift,
         source_distance,
         detector_distance,
         detector_shape,
@@ -434,75 +794,17 @@ def reconstruct_proj(
 
     timelog.set(conf, 'verbose', 'backproject')
 
-    for z in xrange(len(z_voxs_array)):
+    for z in xrange(len(z_voxels_array)):
 
         # Put current z voxel into combined_matrix
 
-        combined_matrix[2, :] = z_voxs_array[z]
-
-        # Find the mapping between volume voxels and detector pixels
-        # for the current angle
-
-        vol_det_map = dot(transform_matrix, combined_matrix)
-
-        flat_map_cols = divide(vol_det_map[0, :], vol_det_map[2, :])
-        flat_map_rows = divide(vol_det_map[1, :], vol_det_map[2, :])
-
-        if conf['detector_shape'] == 'curved':
-
-            # Find the xray angle between each detector column pixel
-            #
-            # By definition of tangens:
-            # ---------------------
-            # flat_map_cols = source_distance * tan(alpha)
-            # tan(alpha) = flat_map_cols/source_distance
-            # alpha = tan-1(flat_map_cols/source_distance)
-
-            alpha = arctan(divide(flat_map_cols, source_distance))
-
-            # By definition of an arc:
-            # http://en.wikipedia.org/wiki/Arc_%28geometry%29
-
-            curved_map_cols = source_distance * alpha
-
-            # Transform units from cm to pixels
-
-            curved_map_cols *= 1.0 / det_pixel_width
-
-            # Offset to center in column direction
-
-            curved_map_cols += det_col_shift
-
-            # From the paper:
-            # "Exact helical reconstruction using native cone-beam geometries"
-            # http://citeseerx.ist.psu.edu/viewdoc/download?\
-            #        doi=10.1.1.121.6008&rep=rep1&type=pdf
-
-            curved_map_rows = flat_map_rows * cos(alpha)
-
-            # Transform units from cm to pixels
-
-            curved_map_rows *= 1.0 / det_pixel_height
-
-            # Offset to center in row direction
-
-            curved_map_rows += det_row_shift
-
-            # Round and cast to int
-
-            map_cols_tmp = rint(curved_map_cols)
-            map_rows_tmp = rint(curved_map_rows)
-        else:
-            map_cols_tmp = rint(flat_map_cols)
-            map_rows_tmp = rint(flat_map_rows)
-
-        # rint returns float, convert to int
-
-        map_cols = map_cols_tmp.astype(int32)
-        map_rows = map_rows_tmp.astype(int32)
+        combined_matrix[2, :] = z_voxels_array[z]
 
         # Find the detector pixels that contribute to the current slice
         # xrays that hit outside the detector area are masked out
+
+        (map_rows, map_cols) = project_voxels_to_pixels(conf,
+                transform_matrix, combined_matrix)
 
         mask = (map_cols >= 0) & (map_rows >= 0) & (map_cols
                 < detector_columns) & (map_rows < detector_rows)
@@ -520,6 +822,6 @@ def reconstruct_proj(
 
     timelog.log(conf, 'verbose', 'backproject')
 
-    return recon_chunk
+    return conf
 
 

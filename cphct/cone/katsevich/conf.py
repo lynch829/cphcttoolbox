@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # conf - shared katsevich configuration helpers
-# Copyright (C) 2011-2012  The Cph CT Toolbox Project lead by Brian Vinter
+# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #

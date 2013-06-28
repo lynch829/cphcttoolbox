@@ -129,7 +129,7 @@ def postprocess_output(gpu_output_data, output_meta, conf):
 if __name__ == '__main__':
     conf = {}
     gpu_init_mod(conf)
-    gpu_module = conf['gpu_module']
+    gpu_module = conf['gpu']['module']
     gpu_count = gpu_module.Device.count()
     if gpu_count < 1:
         raise Exception('No GPUs available!')

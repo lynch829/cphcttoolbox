@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # misc - numpy core misc helpers
-# Copyright (C) 2011-2012  The Cph CT Toolbox Project lead by Brian Vinter
+# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -115,3 +115,33 @@ def linear_coordinates(
         center_off = 0.5 * ((coord_max - coord_min) / coord_count)
         coord_min, coord_max = coord_min + center_off, coord_max - center_off
     return fdt(linspace(coord_min, coord_max, coord_count, endpoint=True))
+
+
+def slide_forward(buffer, steps):
+    """Slide buffer contents the provided number of steps forward. I.e. with
+    buffer = [1, 2, 3, 4, 5, 6] and steps = 2
+    the result is that buffer is changed inline to [3, 4, 5, 6, X, Y] where
+    X, Y are undefined values. Currently the original values in those
+    positions are left unchanged but that may change in the future so don't
+    assume anything about them.
+    
+    The point of the function is to slide the contents without an implicit
+    copy of (nearly) the entire buffer. We could in principle do a simple
+        buffer[:-steps] = buffer[steps:]
+    but due to potential overlap numpy will issue a copy of the right hand
+    side rather than just using a simple view.
+    To work around this we update the entries explicitly in turn.
+    
+    Parameters
+    ----------
+    buffer : ndarray
+        Buffer to modify inline
+    steps : int
+        Number of steps to slide the buffer contents forward
+    """
+
+    # A simple slice in source and destination will result in a copy and
+    # potential memory explosion with big arrays so we loop and update
+    # one at a time instead
+    for i in xrange(len(buffer) - steps):
+        buffer[i] = buffer[i+steps]

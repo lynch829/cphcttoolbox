@@ -3,7 +3,7 @@
 # --- BEGIN_HEADER ---
 #
 # kernels - Katsevich Cone Beam Reconstruction CUDA Kernels
-# Copyright (C) 2011  The CT-Toolbox Project lead by Brian Vinter
+# Copyright (C) 2011-2013  The CT-Toolbox Project lead by Brian Vinter
 #
 # This file is part of CT-Toolbox.
 #
@@ -127,7 +127,7 @@ __device__ int get_global_tid_2D_3D()
 /* Thread assignment for all kernels */
 /* please note that order in filtering block is reversed to col, row, proj */
 
-#if (__CUDA_ARCH__ >= 200) && (CUDA_VERSION >= 4000)
+#if (rt_gpu_specs_MAX_GRID_DIM_Z >= 1)
 /* filter called with (Bx, By, 1) x (Gx, Gy, Gz) 
    where Gz=projs, Bx*Gx=cols and By*Gy=rows */
 /* rebin called with (Bx, By, 1) x (Gx, Gy, Gz)
@@ -529,10 +529,12 @@ __global__ void flat_rev_rebin_chunk(int first, int last, float *gpu_input,
 
 /* 
    Back projection of individual (x, y, z) voxels with projections in range
-   from first to last. Each thread handles one voxel and blocks are launched
-   to cover entire chunk in FoV.
+   from first_proj to last_proj. Each thread handles one voxel and blocks are
+   launched to cover entire chunk in FoV.
 */
-__global__ void flat_backproject_chunk(int first, int last, float *gpu_input, 
+__global__ void flat_backproject_chunk(int chunk_index, int first_proj, 
+				       int last_proj, int first_z, int last_z,
+				       float *gpu_input, 
 				       float *proj_row_mins,
 				       float *proj_row_maxs,
 				       float *gpu_output) {
@@ -541,8 +543,7 @@ __global__ void flat_backproject_chunk(int first, int last, float *gpu_input,
   int y_local = thread_backproject_y();
   int z_local = thread_backproject_z();
   
-  int proj_index, chunk_index, chunk_z_start;
-  //int chunk_z_end, chunk_z_last;
+  int proj_index;
   /* global indices */
   int x, y, z;
   float x_coord, y_coord, z_coord;
@@ -565,17 +566,18 @@ __global__ void flat_backproject_chunk(int first, int last, float *gpu_input,
   */
 
   /* helpers */
-  chunk_index = first / rt_chunk_projs_offset;
-  chunk_z_start = chunk_index * rt_chunk_size;
-  //chunk_z_end = chunk_z_start + rt_chunk_size;
-  //chunk_z_last = chunk_z_end - 1;
   /* global indices */
   x = x_local;
   y = y_local;
-  z = z_local + chunk_z_start;
+  z = z_local + first_z;
   x_coord = rt_x_min + x * rt_delta_x;
   y_coord = rt_y_min + y * rt_delta_y;
   z_coord = rt_z_min + z * rt_delta_z;
+
+  if (z > last_z) {
+    //printf("kernel thread with z out of range: %d\n", z);
+    return;
+  }
 
   /*
   if (x == debug_x && y == debug_y && z_local == debug_z) {
@@ -599,7 +601,7 @@ __global__ void flat_backproject_chunk(int first, int last, float *gpu_input,
 
     Unrolling the boundary loops does not seem to improve performance.
   */
-  for (proj_index=first-1; proj_index <= last+1; proj_index++) {
+  for (proj_index=first_proj-1; proj_index <= last_proj+1; proj_index++) {
     /* cycle values to prepare for new next proj */
     cycle_next(proj);
     cycle_next(scale_help);
@@ -617,7 +619,7 @@ __global__ void flat_backproject_chunk(int first, int last, float *gpu_input,
     cur_proj = proj_index - 1;
     */
     /* calculate helpers for next projection */
-    proj[next] = proj_index - first;
+    proj[next] = proj_index - first_proj;
     source_angle = rt_s_min +  rt_delta_s * (proj_index + 0.5);
     /* scale helper and column coordinate from projection formula */
     scale_help[next] = rt_scan_radius - x_coord * cosf(source_angle) - \
@@ -652,7 +654,7 @@ __global__ void flat_backproject_chunk(int first, int last, float *gpu_input,
     z_first[next] = ceil((z_coord_min[next] - rt_z_min) / rt_delta_z);
     z_last[next] = floor((z_coord_max[next] - rt_z_min) / rt_delta_z);
     /* Stop here if first two warm up rounds or if no contribution */
-    if (proj_index <= first || z < z_first[cur] || z > z_last[cur])
+    if (proj_index <= first_proj || z < z_first[cur] || z > z_last[cur])
       continue;
     /*
     if (x == debug_x && y == debug_y && z_local == debug_z) {
@@ -747,7 +749,7 @@ __global__ void flat_backproject_chunk(int first, int last, float *gpu_input,
   }
   
   offset = voxel_offset(x, y, z_local);
-  gpu_output[offset] = result;
+  gpu_output[offset] += result;
   /*
   if (x == debug_x && y == debug_y && z_local == debug_z) {
     printf("voxel offset for (%d, %d, %d): %d\n", x, y, z, offset);
@@ -1111,7 +1113,9 @@ __global__ void curved_rev_rebin_chunk(int first, int last, float *gpu_input,
    from first to last. Each thread handles one voxel and blocks are launched
    to cover entire chunk in FoV.
 */
-__global__ void curved_backproject_chunk(int first, int last, float *gpu_input, 
+__global__ void curved_backproject_chunk(int chunk_index, int first_proj, 
+					 int last_proj, int first_z, int last_z, 
+					 float *gpu_input, 
 					 float *proj_row_mins,
 					 float *proj_row_maxs,
 					 float *gpu_output) {
@@ -1120,8 +1124,7 @@ __global__ void curved_backproject_chunk(int first, int last, float *gpu_input,
   int y_local = thread_backproject_y();
   int z_local = thread_backproject_z();
   
-  int proj_index, chunk_index, chunk_z_start;
-  //int chunk_z_end, chunk_z_last;
+  int proj_index;
   /* global indices */
   int x, y, z;
   float x_coord, y_coord, z_coord;
@@ -1144,17 +1147,18 @@ __global__ void curved_backproject_chunk(int first, int last, float *gpu_input,
   */
 
   /* helpers */
-  chunk_index = first / rt_chunk_projs_offset;
-  chunk_z_start = chunk_index * rt_chunk_size;
-  //chunk_z_end = chunk_z_start + rt_chunk_size;
-  //chunk_z_last = chunk_z_end - 1;
   /* global indices */
   x = x_local;
   y = y_local;
-  z = z_local + chunk_z_start;
+  z = z_local + first_z;
   x_coord = rt_x_min + x * rt_delta_x;
   y_coord = rt_y_min + y * rt_delta_y;
   z_coord = rt_z_min + z * rt_delta_z;
+
+  if (z > last_z) {
+    //printf("kernel thread with z out of range: %d\n", z);
+    return;
+  }
 
   /*
   if (x == debug_x && y == debug_y && z_local == debug_z) {
@@ -1178,7 +1182,7 @@ __global__ void curved_backproject_chunk(int first, int last, float *gpu_input,
 
     Unrolling the boundary loops does not seem to improve performance.
   */
-  for (proj_index=first-1; proj_index <= last+1; proj_index++) {
+  for (proj_index=first_proj-1; proj_index <= last_proj+1; proj_index++) {
     /* cycle values to prepare for new next proj */
     cycle_next(proj);
     cycle_next(scale_help);
@@ -1196,7 +1200,7 @@ __global__ void curved_backproject_chunk(int first, int last, float *gpu_input,
     cur_proj = proj_index - 1;
     */
     /* calculate helpers for next projection */
-    proj[next] = proj_index - first;
+    proj[next] = proj_index - first_proj;
     source_angle = rt_s_min +  rt_delta_s * (proj_index + 0.5);
     /* scale helper and column coordinate from projection formula */
     scale_help[next] = rt_scan_radius - x_coord * cosf(source_angle) - \
@@ -1236,7 +1240,7 @@ __global__ void curved_backproject_chunk(int first, int last, float *gpu_input,
     z_first[next] = ceil((z_coord_min[next] - rt_z_min) / rt_delta_z);
     z_last[next] = floor((z_coord_max[next] - rt_z_min) / rt_delta_z);
     /* Stop here if first two warm up rounds or if no contribution */
-    if (proj_index <= first || z < z_first[cur] || z > z_last[cur])
+    if (proj_index <= first_proj || z < z_first[cur] || z > z_last[cur])
       continue;
     /*
     if (x == debug_x && y == debug_y && z_local == debug_z) {
@@ -1331,7 +1335,7 @@ __global__ void curved_backproject_chunk(int first, int last, float *gpu_input,
   }
   
   offset = voxel_offset(x, y, z_local);
-  gpu_output[offset] = result;
+  gpu_output[offset] += result;
   /*
   if (x == debug_x && y == debug_y && z_local == debug_z) {
     printf("voxel offset for (%d, %d, %d): %d\n", x, y, z, offset);

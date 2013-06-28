@@ -33,9 +33,9 @@ import sys
 import traceback
 
 from cphct.cu.core import gpu_init_mod, gpu_init_ctx, \
-    gpu_kernel_auto_init, gpu_exit, log_gpu_specs, gpu_save_kernels
-from cphct.cu.io import cu_free_all, get_cu_data, \
-    get_cu_total_size
+    gpu_kernel_auto_init, gpu_exit, log_gpu_specs, gpu_save_kernels, \
+    gpu_pointer_from_array, gpu_alloc_from_array
+from cphct.cu.io import cu_free_all, get_cu_data, get_cu_total_size
 from cphct.io import create_path_dir
 from cphct.log import logging, allowed_log_levels, setup_log, \
     default_level, log_scan_geometry
@@ -43,7 +43,6 @@ from cphct.misc import timelog
 
 # These are basic numpy functions exposed through npy to use same numpy
 
-from cphct.npycore import radians
 from cphct.npycore.io import get_npy_data, get_npy_total_size, \
     npy_free_all
 from cphct.npycore.utils import log_checksum
@@ -55,6 +54,57 @@ from cphct.cone.fdk.cu.kernels import init_recon, rt_const, \
     reconstruct_proj
 
 app_names = ['fdk', 'cufdk']
+
+
+def __move_projs_to_GPU(
+    conf,
+    gpu_projs_data,
+    projs_data,
+    projs_meta,
+    ):
+    """Moves a boundingboxed projection chunk to the GPU
+    Parameters
+    ----------
+    conf : dict
+        A dictionary of configuration options.
+    gpu_projs_data : gpuarray
+        GPU projection data array
+    projs_data : ndarray
+        CPU projection data array
+    projs_meta : list of dict
+        List of meta data dictionaries matching projs_data
+    
+    Returns
+    -------
+    output : gpuarray
+        Returns gpu array with boundingboxed projection data
+    """
+
+    gpu_module = conf['gpu']['module']
+    gpu_projs_data_ptr = gpu_pointer_from_array(gpu_projs_data)
+    start_row = conf['app_state']['projs']['boundingbox'][0, 0]
+    end_row = conf['app_state']['projs']['boundingbox'][0, 1]
+    proj_bytes = gpu_projs_data.shape[1] * gpu_projs_data.shape[2] \
+        * gpu_projs_data.dtype.itemsize
+
+    for proj_index in xrange(len(projs_meta)):
+        proj_meta = projs_meta[proj_index]
+
+        gpu_offset = proj_index * proj_bytes
+
+        logging.debug('copy proj: %d, start_row: %d, end_row: %d, bytes: %d'
+                       % (proj_index, start_row, end_row,
+                      projs_data[proj_index, start_row:end_row].nbytes))
+        logging.debug('from host to device with offset: %d bytes'
+                      % gpu_offset)
+
+        timelog.set(conf, 'verbose', 'host_to_gpu', barrier=True)
+        gpu_module.memcpy_htod(gpu_projs_data_ptr + gpu_offset,
+                               projs_data[proj_index, start_row:
+                               end_row])
+        timelog.log(conf, 'verbose', 'host_to_gpu', barrier=True)
+
+    return gpu_projs_data
 
 
 def reconstruct_volume(
@@ -96,17 +146,24 @@ def reconstruct_volume(
 
     projs_data = get_npy_data(conf, 'projs_data')
     recon_chunk = get_npy_data(conf, 'recon_chunk')
+    detector_boundingboxes = get_npy_data(conf, 'detector_boundingboxes'
+            )
 
-    # Initialize GPU proj data transfer structures
+    # Get GPU data structures
 
-    gpu_chunk_index = get_cu_data(conf, 'chunk_index')
+    gpu_chunk_index_alloc = gpu_alloc_from_array(get_cu_data(conf,
+            'chunk_index'))
     gpu_recon_chunk = get_cu_data(conf, 'recon_chunk')
+    gpu_recon_chunk_alloc = gpu_alloc_from_array(gpu_recon_chunk)
+
+    gpu_proj_row_offset_alloc = gpu_alloc_from_array(get_cu_data(conf,
+            'proj_row_offset'))
 
     gpu_projs_data = get_cu_data(conf, 'projs_data')
 
-    # Get gpu module handle
+    # Get GPU module handle
 
-    gpu_module = conf['gpu_module']
+    gpu_module = conf['gpu']['module']
 
     # Loop over the amount of steps in the scene
 
@@ -114,10 +171,9 @@ def reconstruct_volume(
         logging.info('Reconstructing step: %s/%s' % (step,
                      conf['total_turns']))
 
-        conf['app_state']['scanner_step'] = step
+        # Set current step
 
-        # NOTE: We re-read every projection if volume is split into chunks,
-        # This might be improved
+        conf['app_state']['scanner_step'] = step
 
         # Loop over the amount of volume chunks in the z direction
 
@@ -125,13 +181,24 @@ def reconstruct_volume(
             if not chunk in conf['chunks_enabled']:
                 continue
 
-            # Tell plugins which chunk we are processing
+            # Set current chunk
 
             conf['app_state']['chunk']['idx'] = chunk
 
+            # Set projection bounding box for the current chunk
+
+            conf['app_state']['projs']['boundingbox'] = \
+                detector_boundingboxes[chunk]
+
             # Tell GPU which chunk we are processing
 
-            gpu_module.memset_d32(gpu_chunk_index.gpudata, chunk, 1)
+            gpu_module.memset_d32(gpu_chunk_index_alloc, chunk, 1)
+
+            # Set GPU detector row offset for current chunk
+
+            gpu_module.memset_d32(gpu_proj_row_offset_alloc,
+                                  int(detector_boundingboxes[chunk, 0,
+                                  0]), 1)
 
             z_voxels_start = chunk * conf['chunk_size']
             z_voxels_end = z_voxels_start + conf['chunk_size']
@@ -142,22 +209,25 @@ def reconstruct_volume(
             # Reset GPU recon chunk data
 
             timelog.set(conf, 'verbose', 'memset_gpu', barrier=True)
-            gpu_module.memset_d8(gpu_recon_chunk.gpudata, 0,
+            gpu_module.memset_d8(gpu_recon_chunk_alloc, 0,
                                  gpu_recon_chunk.nbytes)
             timelog.log(conf, 'verbose', 'memset_gpu', barrier=True)
 
             # Loop over the projections in each chunk for each step
 
-            for proj in xrange(conf['projs_per_turn']):
+            for proj in xrange(0, conf['projs_per_turn'],
+                               conf['proj_chunk_size']):
 
                 # Load next projection chunk
 
                 proj_index = step * conf['projs_per_turn'] + proj
 
-                # Tell plugins which projection range we are processing
+                # Set the projection range we are processing
 
                 conf['app_state']['projs']['first'] = proj_index
-                conf['app_state']['projs']['last'] = proj_index
+                conf['app_state']['projs']['last'] = min(proj_index
+                        + conf['proj_chunk_size'], conf['projs_per_turn'
+                        ]) - 1
 
                 hook = 'npy_load_input'
                 logging.info('Loading chunk with %s plugin(s)'
@@ -225,16 +295,8 @@ def reconstruct_volume(
 
                 # Transfer projection to GPU
 
-                logging.debug('copy %d (%db) projs from host to dev'
-                              % (gpu_projs_data.shape[0],
-                              gpu_projs_data.nbytes))
-
-                timelog.set(conf, 'verbose', 'host_to_gpu',
-                            barrier=True)
-
-                gpu_projs_data.set(projs_data)
-                timelog.log(conf, 'verbose', 'host_to_gpu',
-                            barrier=True)
+                __move_projs_to_GPU(conf, gpu_projs_data, projs_data,
+                                    projs_meta)
 
                 # Preprocess current chunk of projections
                 # with configured CUDA plugins
@@ -268,29 +330,24 @@ def reconstruct_volume(
                         sys.exit(1)
 
                 for load_index in xrange(len(projs_meta)):
+                    conf['app_state']['backproject']['proj_idx'] = \
+                        proj_index + load_index
+                        
+                    proj_meta = projs_meta[load_index]
 
-                    # Set meta data
-
-                    proj = projs_meta[load_index]
-
-                    proj['angle'] = fdt(proj['angle'])
-                    proj['angle_rad'] = radians(proj['angle'])
-                    proj['step'] = step
-                    proj['chunk'] = chunk
-                    proj['index'] = proj_index + load_index
-
-                    # Reconstruct the loaded projection
+                    # Reconstruct the preprocessed projection
 
                     timelog.set(conf, 'verbose', 'proj_recon',
                                 barrier=True)
 
-                    reconstruct_proj(conf, proj, fdt)
+                    reconstruct_proj(conf, proj_meta, fdt)
 
                     log_time = timelog.log(conf, 'verbose', 'proj_recon'
                             , barrier=True)
 
                     msg = 'Reconstructed projection: %s, angle: %s' \
-                        % (proj['index'], proj['angle'])
+                        % (conf['app_state']['backproject']['proj_idx'
+                           ], proj_meta['angle'])
 
                     if conf['timelog'] == 'verbose':
                         msg = '%s in %.4f seconds' % (msg, log_time)
@@ -457,6 +514,7 @@ def main(conf, opts):
     # Complete configuration initialization
 
     timelog.set(conf, 'verbose', 'conf_init')
+
     fill_fdk_cu_conf(conf)
 
     fdt = conf['data_type']
@@ -468,7 +526,7 @@ def main(conf, opts):
 
     timelog.set(conf, 'verbose', 'gpu_init')
     gpu_init_mod(conf)
-    gpu_module = conf['gpu_module']
+    gpu_module = conf['gpu']['module']
     gpu_count = gpu_module.Device.count()
     if gpu_count < 1:
         logging.error('No GPUs available!')

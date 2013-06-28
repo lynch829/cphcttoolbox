@@ -56,7 +56,7 @@ short_name = 'cphcttoolbox'
 
 # IMPORTANT: Please keep version in sync with doc-src/README.t2t
 
-version_tuple = (1, 0, 2)
+version_tuple = (1, 0, 3)
 version_suffix = ''
 version_string = '.'.join([str(i) for i in version_tuple]) + version_suffix
 package_version = '%s %s' % (package_name, version_string)
@@ -65,7 +65,7 @@ project_email = 'brian DOT vinter AT gmail DOT com'
 maintainer_team = 'The Cph CT Toolbox maintainers'
 maintainer_email = 'jonas DOT bardino AT gmail DOT com'
 project_url = 'http://code.google.com/p/cphcttoolbox/'
-download_url = 'http://code.google.com/p/cphcttoolbox/downloads/list'
+download_url = 'http://pypi.python.org/pypi/cphcttoolbox/'
 license_name = 'GNU GPL v2'
 short_desc = \
     'Cph CT Toolbox is a selection of Computed Tomography tools'

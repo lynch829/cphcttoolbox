@@ -32,9 +32,6 @@ Requires external init of geometry configuration like scan_radius and so on.
 This may come from init.cu or be hard coded from runtime generated code.
 */
 
-/* For debugging */
-
-#include <stdio.h>
 
 /* Constants */
 
@@ -50,21 +47,22 @@ This may come from init.cu or be hard coded from runtime generated code.
 
 /* Flat indexing macros */
 
-#define COMPLEX_PROJ_REAL_IDX(y,x) ((y*rt_proj_filter_width*2)+(x*2))
-#define COMPLEX_PROJ_IDX(y,x) ((y*rt_proj_filter_width*2)+(x))
-#define PROJ_IDX(y,x) (y*rt_detector_columns+x)
-#define VOLUME_SLICE_IDX(y,x) ((y*rt_x_voxels)+x)
+#define COMPLEX_PROJ_REAL_IDX(y,x) (((y)*rt_proj_filter_width*2)+(x*2))
+#define COMPLEX_PROJ_IDX(y,x) (((y)*rt_proj_filter_width*2)+(x))
+#define PROJ_IDX(y,x) ((y)*rt_detector_columns+(x))
+#define VOLUME_SLICE_IDX(y,x) (((y)*rt_x_voxels)+(x))
 
 
 /* Weight projection data */
 
-__global__ void weight_proj(float *proj, 
+__global__ void weight_proj(float *proj,
+			    unsigned int *proj_row_offset,
 			    float *weight) {
 
    unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;   
    unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
       
-   proj[PROJ_IDX(y,x)] *= weight[PROJ_IDX(y,x)];
+   proj[PROJ_IDX(y,x)] *= weight[PROJ_IDX(y+*proj_row_offset,x)];
 }
 
 
@@ -168,8 +166,9 @@ __global__ void generate_volume_weight(float *volume_weight_matrix,
 __forceinline__ __device__ void backproject_slice(float *recon_voxel,
                                                   float *transform_matrix, 
                                                   float *combined,
-                                                  float *proj_data) {
-   
+                                                  float *proj_data,
+						  unsigned int *proj_row_offset) {
+
    // First calculate the dot product between transform and combined
 
    float dot_row0;
@@ -216,10 +215,16 @@ __forceinline__ __device__ void backproject_slice(float *recon_voxel,
 		       + float(rt_detector_row_shift)));
 #endif
 
+   
    // Mask out voxel if the ray passing through it doensn't hit the detector
 
    mask = (map_col>=0) & (map_col<rt_detector_columns) 
      & (map_row>=0) & (map_row<rt_detector_rows);
+
+   
+   // Offset map_row according to projection row offset for the processed chunk
+
+   map_row -= *proj_row_offset;
    
    *recon_voxel = mask ? proj_data[PROJ_IDX(map_row, map_col)] : 0.0f;
 }
@@ -233,6 +238,7 @@ __forceinline__ __device__ void backproject_slice(float *recon_voxel,
 
 __global__ void backproject(float *recon_chunk,
 			    float *proj_data,
+			    unsigned int *proj_row_offset,
 			    float *proj_angle_rad,
 			    unsigned int *chunk_index,
 			    float *z_voxel_coordinates,
@@ -286,13 +292,15 @@ __global__ void backproject(float *recon_chunk,
    // Loop over the slices to reconstruct
 
    unsigned int voxel_index = VOLUME_SLICE_IDX(y,x);
+   unsigned int reg_proj_row_offset = *proj_row_offset;
    
    for (i=start_z_vox; i<end_z_vox; i++) {
       combined[2] = shared_z_voxel_coordinates[i];
       backproject_slice(&recon_voxel,
 			&local_transform_matrix[0],
 			&combined[0],
-			proj_data);
+			proj_data, 
+			&reg_proj_row_offset);
 
 #ifndef volume_weight_skip
       recon_voxel *= voxel_weight;

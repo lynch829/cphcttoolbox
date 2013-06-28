@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # __init__ - miscellaneous numpy helper functions shared by all modules.
-# Copyright (C) 2012  The Cph CT Toolbox Project lead by Brian Vinter
+# Copyright (C) 2012-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -35,7 +35,8 @@ from incorrectly moving following comments above module doc string'''
 
 # Functions available through from cphct.misc
 
-from cphct.npycore.misc.base import size_from_shape, linear_coordinates 
+from cphct.npycore.misc.base import size_from_shape, linear_coordinates, \
+     slide_forward
 
 # All sub modules to load in case of 'from X import *'
 

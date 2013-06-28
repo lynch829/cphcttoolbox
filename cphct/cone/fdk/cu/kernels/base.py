@@ -29,10 +29,11 @@
 
 """Step and shoot cone beam CT kernels using the FDK algorithm"""
 
-from cphct.npycore import real
+from cphct.npycore import real, radians
 
 from cphct.npycore.io import get_npy_data, save_auto
 from cphct.npycore.utils import log_checksum
+from cphct.cu.core import gpu_array_alloc_offset, gpu_alloc_from_array
 from cphct.cu.io import get_cu_data
 from cphct.cone.fdk.npycore.kernels import generate_transform_matrix
 from cphct.log import logging
@@ -41,6 +42,7 @@ from cphct.misc import timelog
 
 def weight_proj(
     gpu_proj,
+    gpu_proj_row_offset,
     gpu_weight,
     gpu_kernels,
     gpu_layouts,
@@ -52,6 +54,8 @@ def weight_proj(
     ----------
     gpu_proj : gpuarray
        Projection data
+    gpu_proj_row_offset : gpuarray
+       Projection row offset for current chunk
     gpu_weight : gpuarray
        Projection weight
     gpu_kernels : pycuda.compiler.SourceModule
@@ -67,7 +71,8 @@ def weight_proj(
 
     gpu_weight_proj = gpu_kernels.get_function('weight_proj')
 
-    gpu_weight_proj(gpu_proj, gpu_weight, block=gpu_layouts['proj'][0],
+    gpu_weight_proj(gpu_proj, gpu_proj_row_offset, gpu_weight,
+                    block=gpu_layouts['proj'][0],
                     grid=gpu_layouts['proj'][1])
 
     return gpu_proj
@@ -85,9 +90,9 @@ def proj_to_complex(
     Parameters
     ----------
     gpu_complex_proj : gpuarray
-       complex projection data
+       Complex projection data
     gpu_proj_data : gpuarray
-       float projection data
+       Float projection data
     gpu_kernels : pycuda.compiler.SourceModule
        Compiled CUDA kernels
     gpu_layouts : dict
@@ -120,9 +125,9 @@ def filter_proj(
     Parameters
     ----------
     gpu_complex_proj: gpuarray
-       complex projection data
+       Complex projection data
     gpu_filter : gpuarray
-       filter array
+       Filter array
     gpu_kernels : pycuda.compiler.SourceModule
        Compiled CUDA kernels
     gpu_layouts : dict
@@ -221,6 +226,7 @@ def generate_volume_weight(
 def backproject_proj(
     gpu_recon_chunk,
     gpu_proj_data,
+    gpu_proj_row_offset,
     gpu_proj_angle_rad,
     gpu_chunk_index,
     gpu_z_voxel_coordinates,
@@ -239,6 +245,8 @@ def backproject_proj(
        Reconstructed volume chunk
     gpu_proj_data : gpuarray
        Projection data to reconstruct
+    gpu_proj_row_offset : gpuarray
+       Projection row offset for current chunk
     gpu_proj_angle_rad : gpuarray
        Projection angle in radians
     gpu_chunk_index : gpuarray
@@ -265,6 +273,7 @@ def backproject_proj(
     gpu_backproject(
         gpu_recon_chunk,
         gpu_proj_data,
+        gpu_proj_row_offset,
         gpu_proj_angle_rad,
         gpu_chunk_index,
         gpu_z_voxel_coordinates,
@@ -295,7 +304,7 @@ def reconstruct_proj(conf, proj, fdt):
 
     # Get gpu module
 
-    gpu_module = conf['gpu_module']
+    gpu_module = conf['gpu']['module']
 
     # Get gpu layouts
 
@@ -308,25 +317,47 @@ def reconstruct_proj(conf, proj, fdt):
     # Get GPU data structures
 
     gpu_proj_angle_rad = get_cu_data(conf, 'proj_angle_rad')
-    gpu_proj_data = get_cu_data(conf, 'projs_data')
+    gpu_proj_angle_rad_alloc = gpu_alloc_from_array(gpu_proj_angle_rad)
+    gpu_projs_data = get_cu_data(conf, 'projs_data')
     gpu_complex_proj = get_cu_data(conf, 'complex_proj')
+    gpu_complex_proj_alloc = gpu_alloc_from_array(gpu_complex_proj)
     gpu_proj_weight_matrix = get_cu_data(conf, 'proj_weight_matrix')
     gpu_proj_filter_array = get_cu_data(conf, 'proj_filter_array')
     gpu_volume_weight_matrix = get_cu_data(conf, 'volume_weight_matrix')
     gpu_transform_matrix = get_cu_data(conf, 'transform_matrix')
     gpu_combined_matrix = get_cu_data(conf, 'combined_matrix')
     gpu_chunk_index = get_cu_data(conf, 'chunk_index')
+    gpu_proj_row_offset = get_cu_data(conf, 'proj_row_offset')
     gpu_recon_chunk = get_cu_data(conf, 'recon_chunk')
     gpu_z_voxel_coordinates = get_cu_data(conf, 'z_voxel_coordinates')
 
     # Get CPU proj meta data
 
-    proj_angle_rad = proj['angle_rad']
-    proj_index = proj['index']
+    proj_angle_rad = radians(fdt(proj['angle']))
+
+    # Get projection index
+
+    proj_index = conf['app_state']['backproject']['proj_idx']
+
+    # Offset gpu projection data according to current projection
+
+    proj_chunk_index = proj_index - conf['app_state']['projs']['first']
+    gpu_proj_offset = proj_chunk_index * gpu_projs_data.shape[1] \
+        * gpu_projs_data.shape[2]
+    gpu_proj_shape = (gpu_projs_data.shape[1], gpu_projs_data.shape[2])
+    gpu_proj_data = gpu_array_alloc_offset(gpu_projs_data,
+            gpu_proj_offset, gpu_proj_shape)
+
+    # Determine number of projection rows from boundingbox if defined
+
+    if not 'max_rows' in conf['app_state']['projs']:
+        proj_row_count = conf['detector_rows']
+    else:
+        proj_row_count = conf['app_state']['projs']['max_rows']
 
     # Move proj_angle_rad to GPU
 
-    gpu_module.memcpy_htod(gpu_proj_angle_rad.gpudata, proj_angle_rad)
+    gpu_module.memcpy_htod(gpu_proj_angle_rad_alloc, proj_angle_rad)
 
     if proj['filtered']:
         pass
@@ -341,8 +372,9 @@ def reconstruct_proj(conf, proj, fdt):
 
         if conf['proj_weight'] != 'skip':
             timelog.set(conf, 'verbose', 'proj_weight', barrier=True)
-            weight_proj(gpu_proj_data, gpu_proj_weight_matrix,
-                        gpu_kernels, gpu_layouts)
+            weight_proj(gpu_proj_data, gpu_proj_row_offset,
+                        gpu_proj_weight_matrix, gpu_kernels,
+                        gpu_layouts)
             timelog.log(conf, 'verbose', 'proj_weight', barrier=True)
 
         if conf['checksum']:
@@ -359,7 +391,7 @@ def reconstruct_proj(conf, proj, fdt):
 
             fft_plan = conf['app_state']['gpu']['fft_plan']
 
-            gpu_module.memset_d8(gpu_complex_proj.gpudata, 0,
+            gpu_module.memset_d8(gpu_complex_proj_alloc, 0,
                                  gpu_complex_proj.nbytes)
 
             # Transform projection from float to complex
@@ -368,14 +400,14 @@ def reconstruct_proj(conf, proj, fdt):
                             gpu_kernels, gpu_layouts)
 
             fft_plan.execute(gpu_complex_proj, data_out=None,
-                             inverse=False, batch=conf['detector_rows'
-                             ], wait_for_finish=None)
+                             inverse=False, batch=int(proj_row_count),
+                             wait_for_finish=None)
 
             filter_proj(gpu_complex_proj, gpu_proj_filter_array,
                         gpu_kernels, gpu_layouts)
 
             fft_plan.execute(gpu_complex_proj, data_out=None,
-                             inverse=True, batch=conf['detector_rows'],
+                             inverse=True, batch=int(proj_row_count),
                              wait_for_finish=None)
 
             # Transform projection from complex to float
@@ -443,6 +475,7 @@ def reconstruct_proj(conf, proj, fdt):
     backproject_proj(
         gpu_recon_chunk,
         gpu_proj_data,
+        gpu_proj_row_offset,
         gpu_proj_angle_rad,
         gpu_chunk_index,
         gpu_z_voxel_coordinates,

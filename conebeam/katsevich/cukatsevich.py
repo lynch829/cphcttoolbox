@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # cukatsevich - cuda katsevich reconstruction
-# Copyright (C) 2011-2012  The CT-Toolbox Project lead by Brian Vinter
+# Copyright (C) 2011-2013  The CT-Toolbox Project lead by Brian Vinter
 #
 # This file is part of CT-Toolbox.
 #
@@ -47,6 +47,7 @@ from cphct.npycore import pi, cos, arctan, ceil, int32
 from cphct.npycore.io import save_auto
 from cphct.npycore.io import npy_free_all, get_npy_data, \
     get_npy_total_size
+from cphct.npycore.misc import slide_forward
 from cphct.npycore.utils import log_checksum
 from cphct.plugins import load_plugins, execute_plugin
 from cphct.cone.katsevich.conf import default_katsevich_cu_conf, \
@@ -88,7 +89,7 @@ def reconstruct_volume(
 
     # Get gpu module  and checksum kernel handle
 
-    gpu_module = conf['gpu_module']
+    gpu_module = conf['gpu']['module']
     checksum_array = conf['compute']['kernels']['checksum']
 
     # Check Tam-Danielsson window coverage and warn if not covered
@@ -142,7 +143,8 @@ def reconstruct_volume(
 
     # Filter runs on a single rotation of projs at a time, which is independent
     # of the reconstruction chunk size so we use filter_* buffers for the
-    # filtering and input_chunk and output_chunk for reconstruction.
+    # filtering and input_projs, input_chunk and output_chunk for
+    # reconstruction.
 
     chunk_items = conf['chunk_projs'] * conf['detector_rows'] \
         * conf['detector_columns']
@@ -158,6 +160,7 @@ def reconstruct_volume(
     filter_conv = get_npy_data(conf, 'filter_conv')
     filter_out = get_npy_data(conf, 'filter_out')
     input_buffer = get_npy_data(conf, 'input_buffer')
+    input_projs = get_npy_data(conf, 'input_projs')
     input_chunk = get_npy_data(conf, 'input_chunk')
     output_chunk = get_npy_data(conf, 'output_chunk')
     if conf['checksum']:
@@ -182,7 +185,7 @@ def reconstruct_volume(
     logging.debug('using about %db of device memory'
                   % get_cu_total_size(conf))
 
-    (last_filtered, first_filtered) = (-1, -1)
+    (last_filtered, first_filtered) = (-1, 0)
 
     # Keep output files open for chunked writing
 
@@ -204,7 +207,7 @@ def reconstruct_volume(
         end_proj = last_proj + 1
         (extended_first, extended_last) = (first_proj, last_proj)
 
-        # Extend input_chunk projs range to a multiplum of filter_out_projs.
+        # Extend input_projs range to a multiplum of filter_out_projs.
         # Filtering to prepare all those projections takes place but only the
         # ones from first_proj to last_proj are used in this particular back
         # projection chunk
@@ -233,13 +236,20 @@ def reconstruct_volume(
             input_last,
             ))
 
+        # TODO: this is horribly inefficient for big projs (mem explosion)
+        # ... can we either make it a memmove or maybe interface a fixed
+        # buffer as a circular buffer with a helper function to retrieve
+        # projection X when needed. On-demand filtering with caching would be
+        # even better.
+        # numpy.roll(input_buffer, -buffer_switch, axis=0) may be better?
+
         buffer_switch = extended_first - first_filtered
         if buffer_switch > 0:
 
             # Shift already filtered projs for reuse
 
             logging.debug('shift projs %d' % buffer_switch)
-            input_buffer[:-buffer_switch] = input_buffer[buffer_switch:]
+            slide_forward(input_buffer, buffer_switch)
 
         # reuse already filtered projections and just continue from there
 
@@ -405,6 +415,7 @@ def reconstruct_volume(
 
                 timelog.log(conf, 'verbose', 'core_filter',
                             start_time=0.0, end_time=filter_chunk(
+                    chunk,
                     in_first,
                     in_last,
                     gpu_filter_in,
@@ -489,7 +500,7 @@ def reconstruct_volume(
 
         # TODO: just use a view instead of copy
 
-        input_chunk[:] = input_buffer[rel_in_first:rel_in_end]
+        input_projs[:] = input_buffer[rel_in_first:rel_in_end]
 
         filter_time = timelog.log(conf, 'verbose', 'filter',
                                   barrier=True)
@@ -500,51 +511,73 @@ def reconstruct_volume(
         logging.debug(msg)
 
         if conf['checksum']:
-            log_checksum('filtered projs', input_chunk,
-                         input_chunk.size)
+            log_checksum('filtered projs', input_projs,
+                         input_projs.size)
 
         timelog.set(conf, 'verbose', 'backproject')
 
-        logging.debug('copy %d (%db) projs from no. %d forward to device'
-                       % (len(input_chunk), input_chunk.nbytes,
-                      first_proj))
-        logging.debug('copy from %s to %s' % (input_chunk.size,
-                      gpu_input_chunk))
-
-        # TODO: only copy back to gpu if not in gpu_projs_only mode
-
-        timelog.set(conf, 'verbose', 'host_to_gpu')
-        gpu_module.memcpy_htod(gpu_input_chunk, input_chunk)
-        timelog.log(conf, 'verbose', 'host_to_gpu', barrier=True)
-        if conf['checksum']:
-            check_dest[:] = 0.0
-            checksum_array(
-                gpu_module.Out(check_dest),
-                gpu_input_chunk,
-                int32(check_first),
-                int32(check_last),
-                block=(1, 1, 1),
-                grid=(1, 1),
-                )
-            logging.debug('test checksum_array %d - %d projs is %f'
-                          % (check_first, check_last, check_dest[0]))
-
-        logging.debug('run reconstruction of chunk %d:%d with projs %d:%d'
-                       % (first_z, last_z, first_proj, last_proj))
         output_chunk[:] = 0
         recon_meta = []
         timelog.set(conf, 'verbose', 'memset_gpu')
         gpu_module.memset_d8(gpu_output_chunk, 0, output_chunk.nbytes)
         timelog.log(conf, 'verbose', 'memset_gpu', barrier=True)
+        log_time = 0.0
 
-        timelog.set(conf, 'verbose', 'core_backproject', barrier=True)
+        # Reconstruct using chunks of projections to scale to big projections
 
-        backproject_chunk(first_proj, last_proj, gpu_input_chunk,
-                          gpu_proj_row_mins, gpu_proj_row_maxs,
-                          gpu_output_chunk, conf)
+        for j in xrange(first_proj, last_proj + 1,
+                        conf['backproject_in_projs']):
 
-        log_time = timelog.log(conf, 'verbose', 'core_backproject',
-                               barrier=True)
+            # Act on a sub-range of projections from first_proj to last_proj
+            # (inclusive) updating all z slices in chunk range with the
+            # contribution from those projections.
+
+            (in_first, in_end) = (j, j + conf['backproject_in_projs'])
+            in_end = min(in_end, conf['total_projs'])
+            in_last = in_end - 1
+            rel_first = in_first - first_proj
+            rel_end = in_end - first_proj
+
+            logging.debug('backproject projections %d to %d (%d - %d)' % \
+                          (in_first, in_last, first_proj, last_proj))
+
+            input_chunk[:] = input_projs[rel_first:rel_end]
+
+            logging.debug('copy %d (%db) projs from no. %d forward to device'
+                          % (len(input_chunk), input_chunk.nbytes,
+                             in_first))
+            logging.debug('copy %s to %s' % (input_chunk.size,
+                                                  gpu_input_chunk))
+
+            # TODO: only copy back to gpu if not in gpu_projs_only mode
+
+            timelog.set(conf, 'verbose', 'host_to_gpu')
+            gpu_module.memcpy_htod(gpu_input_chunk, input_chunk)
+            timelog.log(conf, 'verbose', 'host_to_gpu', barrier=True)
+            if conf['checksum']:
+                check_dest[:] = 0.0
+                checksum_array(
+                    gpu_module.Out(check_dest),
+                    gpu_input_chunk,
+                    int32(in_first),
+                    int32(in_last),
+                    block=(1, 1, 1),
+                    grid=(1, 1),
+                    )
+                logging.debug('test checksum_array %d - %d projs is %f'
+                              % (in_first, in_last, check_dest[0]))
+
+            logging.debug('run reconstruction of chunk %d:%d with projs %d:%d'
+                              % (first_z, last_z, in_first, in_last))
+
+            timelog.set(conf, 'verbose', 'core_backproject', barrier=True)
+
+            backproject_chunk(chunk, in_first, in_last, first_z, last_z,
+                              gpu_input_chunk, gpu_proj_row_mins,
+                              gpu_proj_row_maxs, gpu_output_chunk, conf)
+
+            log_time += timelog.log(conf, 'verbose', 'core_backproject',
+                                   barrier=True)
 
         msg = 'Reconstructed chunk: %s:%s' % (first_z, last_z)
 
@@ -757,7 +790,7 @@ def main(conf, opts):
     logging.info('Init GPU %d' % conf['cuda_device_index'])
     timelog.set(conf, 'verbose', 'gpu_init')
     gpu_init_mod(conf)
-    gpu_module = conf['gpu_module']
+    gpu_module = conf['gpu']['module']
     gpu_count = gpu_module.Device.count()
     if gpu_count < 1:
         logging.error('No GPUs available!')
@@ -792,6 +825,9 @@ def main(conf, opts):
         logging.error('no valid gpu compute kernels found!')
         gpu_exit(conf)
         sys.exit(1)
+
+    logging.debug("filter out projs %d" % conf['filter_out_projs'])
+    logging.debug("backproj in projs %d" % conf['backproject_in_projs'])
 
     # Initialize Katsevich kernel data structures
 

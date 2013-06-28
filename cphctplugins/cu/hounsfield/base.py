@@ -158,7 +158,7 @@ def postprocess_output(
         and meta list.
     """
 
-    gpu_module = conf['gpu_module']
+    gpu_module = conf['gpu']['module']
 
     # Retrieve initialized variables
 

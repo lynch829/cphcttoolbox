@@ -42,7 +42,6 @@ from cphct.misc import timelog
 
 # These are basic numpy functions exposed through npy to use same numpy
 
-from cphct.npycore import radians
 from cphct.npycore.io import get_npy_data, get_npy_total_size, \
     npy_free_all
 from cphct.npycore.utils import log_checksum
@@ -105,7 +104,7 @@ def reconstruct_volume(
 
     # Get gpu module handle
 
-    gpu_module = conf['gpu_module']
+    gpu_module = conf['gpu']['module']
 
     # Loop over the amount of steps in the scene
 
@@ -266,30 +265,24 @@ def reconstruct_volume(
                         sys.exit(1)
 
                 for load_index in xrange(len(projs_meta)):
+                    conf['app_state']['backproject']['proj_idx'] = \
+                        proj_index + load_index
 
-                    # Set meta data
-
-                    proj = projs_meta[load_index]
-
-                    proj['angle'] = fdt(proj['angle'])
-                    proj['angle_rad'] = radians(proj['angle'])
-                    proj['step'] = step
-                    proj['chunk'] = chunk
-                    proj['index'] = proj_index + load_index
-                    proj['data'] = projs_data[load_index]
+                    proj_meta = projs_meta[load_index]
 
                     # Reconstruct the loaded projection
 
                     timelog.set(conf, 'verbose', 'proj_recon',
                                 barrier=True)
 
-                    reconstruct_proj(conf, proj, fdt)
+                    reconstruct_proj(conf, proj_meta, fdt)
 
                     log_time = timelog.log(conf, 'verbose', 'proj_recon'
                             , barrier=True)
 
                     msg = 'Reconstructed projection: %s, angle: %s' \
-                        % (proj['index'], proj['angle'])
+                        % (conf['app_state']['backproject']['proj_idx'
+                           ], proj_meta['angle'])
 
                     if conf['timelog'] == 'verbose':
                         msg = '%s in %.4f seconds' % (msg, log_time)
@@ -466,7 +459,7 @@ def main(conf, opts):
 
     timelog.set(conf, 'verbose', 'gpu_init')
     gpu_init_mod(conf)
-    gpu_module = conf['gpu_module']
+    gpu_module = conf['gpu']['module']
     gpu_count = gpu_module.Device.count()
     if gpu_count < 1:
         logging.error('No GPUs available!')

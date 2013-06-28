@@ -136,7 +136,16 @@ def _cu_opts():
         Returns a dictionary of cuda specific options helper dictionaries.
     """
 
-    opts = {}
+    opts = {
+        'proj_chunk_size': {
+        'long': 'proj-chunk-size',
+        'short': None,
+        'args': int,
+        'handler': int_value,
+        'default': 1,
+        'description': 'CUDA FDK number of projections processed at a time.',
+        },
+    }
     return opts
 
 

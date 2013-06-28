@@ -56,8 +56,8 @@ def plugin_init(
     ----------
     conf : dict
         A dictionary of configuration optionS.
-    dim : {'x', 'y', 'z'}
-        Dimension to slice:
+    dim : str
+        Dimension to slice ('x', 'y' or 'z'):
         x: 2D slices with z dim as rows and y dim as columns
         y: 2D slices with z dim as rows and x dim as columns
         z: 2D slices with y dim as rows and x dim as columns
@@ -66,7 +66,15 @@ def plugin_init(
         argument for index replacement e.g. stack.%.4d.png
     stack_size : str or None
         Optional max width of saved stack
+
+    Raises
+    ------
+    ValueError
+        If provided dim is not a valid dimension name (x, y or z).
     """
+
+    if not dim in ('x', 'y', 'z'):
+        raise ValueError('invalid savestacked dim value: %s' % dim)
 
     abs_save_path = expand_path(conf['working_directory'], save_path)
     __plugin_state__['abs_save_path'] = abs_save_path
@@ -132,8 +140,8 @@ def plugin_exit(
     ----------
     conf : dict
         A dictionary of configuration optionS.
-    dim : {'x', 'y', 'z'}
-        Dimension to slice:
+    dim : str
+        Dimension to slice ('x', 'y' or 'z'):
         x: 2D slices with z dim as rows and y dim as columns
         y: 2D slices with z dim as rows and x dim as columns
         z: 2D slices with y dim as rows and x dim as columns
@@ -214,8 +222,8 @@ def __shared_save_output(
         List of meta data dictionaries matching output_data.
     conf : dict
         A dictionary of configuration options.
-    dim : {'x', 'y', 'z'}
-        Dimension to slice:
+    dim : str
+        Dimension to slice ('x', 'y' or 'z'):
         x: 2D slices with z dim as rows and y dim as columns
         y: 2D slices with z dim as rows and x dim as columns
         z: 2D slices with y dim as rows and x dim as columns 

@@ -37,7 +37,7 @@ from cphct.npycore.io import load_helper_proj, get_npy_data
 from cphct.npycore.utils import check_norm
 from cphct.plugins import get_plugin_var
 from cphct.cu.core import gpuarray, get_gpu_layout, generate_gpu_init, \
-    load_kernel_source, compile_kernels, cuda
+    load_kernel_source, compile_kernels, cuda, gpu_pointer_from_array
 from cphct.cu.misc import gpuarray_copy
 
 # Internal plugin state for individual plugin instances
@@ -71,17 +71,27 @@ def __make_gpu_kernels(conf, air_ref_pixel_idx=None):
 
     kernel_code = generate_gpu_init(conf, rt_const)
 
+    kernel_code += '\n'
+    kernel_code += \
+        '/* --- BEGIN AUTOMATIC PLUGIN RUNTIME CONFIGURATION --- */\n'
+    kernel_code += '\n'
+
     if air_ref_pixel_idx is not None:
-        kernel_code += '\n'
-        kernel_code += \
-            '/* --- BEGIN AUTOMATIC PLUGIN RUNTIME CONFIGURATION --- */\n'
-        kernel_code += '\n'
         kernel_code += '#define plugin_rt_air_ref_pixel_idx %s\n' \
             % air_ref_pixel_idx
-        kernel_code += '\n'
-        kernel_code += \
-            '/* --- END AUTOMATIC PLUGIN RUNTIME CONFIGURATION --- */\n'
-        kernel_code += '\n'
+
+    if 'max_rows' in conf['app_state']['projs']:
+        projection_rows = conf['app_state']['projs']['max_rows']
+    else:
+        projection_rows = conf['detector_rows']
+
+    kernel_code += '#define plugin_rt_proj_size %s\n' \
+        % (projection_rows * conf['detector_columns'])
+
+    kernel_code += '\n'
+    kernel_code += \
+        '/* --- END AUTOMATIC PLUGIN RUNTIME CONFIGURATION --- */\n'
+    kernel_code += '\n'
 
     kernel_code += load_kernel_source(cu_kernel_path)
 
@@ -138,8 +148,6 @@ def plugin_init(
         If CUDA kernel didn't compile 
     """
 
-    gpu_module = conf['gpu_module']
-
     # Transform dtype_norm string to dtype
 
     dtype_norm = allowed_data_types[dtype_norm]
@@ -169,13 +177,13 @@ def plugin_init(
         # Due to GPU out-of-order execution we need a
         # proj copy when using air_ref_pixel
 
-        proj_data = get_npy_data(conf, 'projs_data')
-        gpu_tmp_input_data = gpuarray.zeros(proj_data.shape,
-                proj_data.dtype)
-    else:
+        projs_data = get_npy_data(conf, 'projs_data')
 
+        gpu_proj_ref_pixel_vals = gpuarray.zeros((projs_data.shape[0],
+                1), projs_data.dtype)
+    else:
         air_ref_pixel_idx = None
-        gpu_tmp_input_data = None
+        gpu_proj_ref_pixel_vals = None
 
     # Check norm values
 
@@ -201,11 +209,12 @@ def plugin_init(
             dtype=allowed_data_types['uint32'])
     __plugin_state__['gpu_zero_norm'] = \
         gpuarray.to_gpu(zero_norm_matrix)
-    __plugin_state__['gpu_layout'] = get_gpu_layout(conf['detector_rows'
-            ], conf['detector_columns'], conf['gpu_target_threads'])
+    __plugin_state__['gpu_layout'] = conf['app_state']['gpu']['layouts'
+            ]['proj']
 
     __plugin_state__['air_ref_pixel_idx'] = air_ref_pixel_idx
-    __plugin_state__['gpu_tmp_input_data'] = gpu_tmp_input_data
+    __plugin_state__['gpu_proj_ref_pixel_vals'] = \
+        gpu_proj_ref_pixel_vals
 
     gpu_kernels = __make_gpu_kernels(conf, air_ref_pixel_idx)
 
@@ -279,12 +288,13 @@ def preprocess_input(
         Returns a 2-tuple of the array of stacked projections and input_meta.
     """
 
-    gpu_module = conf['gpu_module']
+    gpu_module = conf['gpu']['module']
 
     # Retrieve initialized variables
 
     gpu_proj_count = __plugin_state__['gpu_proj_count']
-    gpu_tmp_input_data = __plugin_state__['gpu_tmp_input_data']
+    gpu_proj_ref_pixel_vals = __plugin_state__['gpu_proj_ref_pixel_vals'
+            ]
     gpu_zero_norm = __plugin_state__['gpu_zero_norm']
     gpu_air_norm = __plugin_state__['gpu_air_norm']
     gpu_layout = __plugin_state__['gpu_layout']
@@ -312,14 +322,21 @@ def preprocess_input(
             )
     else:
 
-        # if 'air_ref_pixel_idx' we need a copy of the input data chunk
-        # due to GPU out-of-order block execution
+        # if 'air_ref_pixel_idx' we need to move projection reference pixels to the GPU
 
-        gpuarray_copy(conf, gpu_input_data, out=gpu_tmp_input_data)
+        gpu_pointer_from_array
+        gpu_proj_ref_pixel_vals_ptr = \
+            gpu_pointer_from_array(gpu_proj_ref_pixel_vals)
+        projs_data = get_npy_data(conf, 'projs_data')
+        for i in xrange(projs_data.shape[0]):
+            gpu_offset = i * gpu_proj_ref_pixel_vals.dtype.itemsize
+            gpu_module.memcpy_htod(int(gpu_proj_ref_pixel_vals_ptr
+                                   + gpu_offset),
+                                   projs_data[i].flat[air_ref_pixel_idx])
 
         gpu_flux2proj(
             gpu_input_data,
-            gpu_tmp_input_data,
+            gpu_proj_ref_pixel_vals,
             gpu_proj_count,
             gpu_zero_norm,
             gpu_air_norm,

@@ -7,7 +7,7 @@
 </HEAD><BODY BGCOLOR="white" TEXT="black">
 <CENTER>
 <H1>Cph CT Toolbox</H1>
-<FONT SIZE="4">Last updated 06-05-2013 17:02</FONT>
+<FONT SIZE="4">Last updated 28-06-2013 10:58</FONT>
 </CENTER>
 
 
@@ -229,6 +229,89 @@ Configurable settings are available in the output of:
 <PRE>
   USAGE: ../fanbeam/centerfdk/centerfdk.py [OPTIONS] ARGS
   where OPTIONS may include the following:
+  --help / -H 
+      Show this help
+  --proj-filter / cfg:proj_filter    &lt;type 'str'&gt;
+      Projection filter filepath or one of the builtin filters:
+  	['hamming', 'ram-lak', 'shepp-logan', 'cosine', 'hann', 'skip']
+      Default: hamming
+  --source-distance / cfg:source_distance    &lt;type 'float'&gt;
+      Distance in cm from source to isocenter
+      Default: 3.0
+  --detector-width / cfg:detector_width    &lt;type 'float'&gt;
+      Detector width in cm (-1 for auto)
+      Default: -1
+  --proj-filter-nyquist-fraction / cfg:proj_filter_nyquist_fraction    &lt;type 'float'&gt;
+      FDK projection filter nyquest fraction (used when generating builtin filters)
+      Default: 1.0
+  --detector-column-offset / cfg:detector_column_offset    &lt;type 'float'&gt;
+      Center ray alignment offset in pixel columns
+      Default: 0.0
+  --load-gpu-binary-path / cfg:load_gpu_binary_path    &lt;type 'str'&gt;
+      Path to load compiled CUDA kernels from
+      Default: 
+  --save-gpu-kernels-path / cfg:save_gpu_kernels_path    &lt;type 'str'&gt;
+      Path to save runtime optimized CUDA kernels code in
+      Default: 
+  --cu-postprocess-output / cfg:cu_postprocess_output    &lt;type 'str'&gt;
+      Apply specified cuda postprocessing to output array
+      Default: 
+  --temporary-directory / cfg:temporary_directory    &lt;type 'str'&gt;
+      Prefix for all temporary file paths
+      Default: /tmp
+  --gpu-projs-only / cfg:gpu_projs_only    &lt;type 'bool'&gt;
+      Keep partial results on the GPU - no copy to host
+      Default: True
+  --npy-preprocess-input / cfg:npy_preprocess_input    &lt;type 'str'&gt;
+      Apply specified numpy preprocessing to input array
+      Default: 
+  --gpu-target-filter-memory / cfg:gpu_target_filter_memory    &lt;type 'int'&gt;
+      GPU memory in bytes to aim for with projection filter chunking
+      Default: 268435456
+  --detector-distance / cfg:detector_distance    &lt;type 'float'&gt;
+      Distance in cm from isocenter to detector
+      Default: 3.0
+  --working-directory / -w / cfg:working_directory    &lt;type 'str'&gt;
+      Prefix for all relative paths
+      Default: .
+  --input-precision / -i / cfg:input_precision    &lt;type 'str'&gt;
+      Select input data type (precision)
+      Default: float32
+  --version / -V 
+      Show version
+  --proj-weight / cfg:proj_weight    &lt;type 'str'&gt;
+      FDK projection weight, filepath or float.
+      Default: 
+  --cuda-device-index / cfg:cuda_device_index    &lt;type 'int'&gt;
+      Which CUDA device to use: -1 for auto
+      Default: -1
+  --y-min / cfg:y_min    &lt;type 'float'&gt;
+      Field of View minimum y coordinate in cm
+      Default: -1.0
+  --proj-filter-width / cfg:proj_filter_width    &lt;type 'int'&gt;
+      FDK projection filter resolution, must be a power of two.
+      Default: -1
+  --x-max / cfg:x_max    &lt;type 'float'&gt;
+      Field of View maximum x coordinate in cm
+      Default: 1.0
+  --gpu-target-threads / cfg:gpu_target_threads    &lt;type 'int'&gt;
+      Number of CUDA kernel threads to aim for per block
+      Default: 256
+  --angle-start / cfg:angle_start    &lt;type 'float'&gt;
+      Which angle to begin from
+      Default: 0.0
+  --checksum / cfg:checksum    &lt;type 'int'&gt;
+      Level of checksums to enable
+      Default: 0
+  --y-max / cfg:y_max    &lt;type 'float'&gt;
+      Field of View maximum y coordinate in cm
+      Default: 1.0
+  --filter / cfg:filter    &lt;type 'str'&gt;
+      Type of projection filter to apply
+      Default: none
+  --x-min / cfg:x_min    &lt;type 'float'&gt;
+      Field of View minimum x coordinate in cm
+      Default: -1.0
   --npy-save-output / cfg:npy_save_output    &lt;type 'str'&gt;
       Output saver to format and write output data to one or more files
       Default: 
@@ -240,10 +323,6 @@ Configurable settings are available in the output of:
       Default: 0.0
   --load-gpu-kernels-path 
       Path to load CUDA kernels code from
-  --proj-filter / cfg:proj_filter    &lt;type 'str'&gt;
-      Projection filter filepath or one of the builtin filters:
-  	['hamming', 'ram-lak', 'shepp-logan', 'cosine', 'hann', 'skip']
-      Default: hamming
   --chunk-range / cfg:chunk_range    &lt;type 'str'&gt;
       Select range of chunks to reconstruct
   --output-precision / cfg:output_precision    &lt;type 'str'&gt;
@@ -261,21 +340,13 @@ Configurable settings are available in the output of:
   --complex-precision / cfg:complex_precision    &lt;type 'str'&gt;
       Select internal complex data type (precision)
       Default: complex64
-  --help / -H 
-      Show this help
   --timelog / cfg:timelog    &lt;type 'str'&gt;
       Log execution times
       Default: default
       Allowed: default, verbose
-  --detector-width / cfg:detector_width    &lt;type 'float'&gt;
-      Detector width in cm (-1 for auto)
-      Default: -1
   --projs-per-turn / cfg:projs_per_turn    &lt;type 'int'&gt;
       Number of projections in a full gantry rotation
       Default: 360
-  --proj-filter-nyquist-fraction / cfg:proj_filter_nyquist_fraction    &lt;type 'float'&gt;
-      FDK projection filter nyquest fraction (used when generating builtin filters)
-      Default: 1.0
   --engine / -E / cfg:engine    &lt;type 'str'&gt;
       Back end calculation engine
       Default: numpy
@@ -283,38 +354,17 @@ Configurable settings are available in the output of:
   --total-turns / cfg:total_turns    &lt;type 'int'&gt;
       Number of full gantry rotations (-1 for auto)
       Default: -1
-  --detector-column-offset / cfg:detector_column_offset    &lt;type 'float'&gt;
-      Center ray alignment offset in pixel columns
-      Default: 0.0
   --precision / -p / cfg:precision    &lt;type 'str'&gt;
       Select internal data type (precision)
       Default: float32
-  --save-gpu-kernels-path / cfg:save_gpu_kernels_path    &lt;type 'str'&gt;
-      Path to save runtime optimized CUDA kernels code in
-      Default: 
-  --cu-postprocess-output / cfg:cu_postprocess_output    &lt;type 'str'&gt;
-      Apply specified cuda postprocessing to output array
-      Default: 
-  --temporary-directory / cfg:temporary_directory    &lt;type 'str'&gt;
-      Prefix for all temporary file paths
-      Default: /tmp
   --y-voxels / cfg:y_voxels    &lt;type 'int'&gt;
       Field of View resolution in y
       Default: 512
   --save-filtered-projs-data-path / cfg:save_filtered_projs_data_path    &lt;type 'str'&gt;
       Save filtered binary projection data in given path
       Default: 
-  --gpu-projs-only / cfg:gpu_projs_only    &lt;type 'bool'&gt;
-      Keep partial results on the GPU - no copy to host
-      Default: True
-  --npy-preprocess-input / cfg:npy_preprocess_input    &lt;type 'str'&gt;
-      Apply specified numpy preprocessing to input array
-      Default: 
   --log-format / cfg:log_format    &lt;type 'str'&gt;
       Log line format
-  --gpu-target-filter-memory / cfg:gpu_target_filter_memory    &lt;type 'int'&gt;
-      GPU memory in bytes to aim for with projection filter chunking
-      Default: 268435456
   --volume-weight / cfg:volume_weight    &lt;type 'str'&gt;
       FDK reconstructed volume weight, filepath or float.
       Default: 
@@ -323,15 +373,9 @@ Configurable settings are available in the output of:
   --detector-columns / cfg:detector_columns    &lt;type 'int'&gt;
       Number of pixel columns in projections
       Default: 256
-  --detector-distance / cfg:detector_distance    &lt;type 'float'&gt;
-      Distance in cm from isocenter to detector
-      Default: 3.0
-  --working-directory / -w / cfg:working_directory    &lt;type 'str'&gt;
-      Prefix for all relative paths
-      Default: .
-  --input-precision / -i / cfg:input_precision    &lt;type 'str'&gt;
-      Select input data type (precision)
-      Default: float32
+  --save-gpu-binary-path / cfg:save_gpu_binary_path    &lt;type 'str'&gt;
+      Path to save runtime optimized compiled CUDA kernels in
+      Default: 
   --detector-shape / cfg:detector_shape    &lt;type 'str'&gt;
       Shape of detector
       Default: flat
@@ -341,65 +385,27 @@ Configurable settings are available in the output of:
   --npy-load-input / cfg:npy_load_input    &lt;type 'str'&gt;
       Input loader to parse and read input data into array
       Default: 
-  --version / -V 
-      Show version
-  --save-gpu-binary-path / cfg:save_gpu_binary_path    &lt;type 'str'&gt;
-      Path to save runtime optimized compiled CUDA kernels in
-      Default: 
-  --proj-weight / cfg:proj_weight    &lt;type 'str'&gt;
-      FDK projection weight, filepath or float.
-      Default: 
-  --cuda-device-index / cfg:cuda_device_index    &lt;type 'int'&gt;
-      Which CUDA device to use: -1 for auto
-      Default: -1
-  --y-min / cfg:y_min    &lt;type 'float'&gt;
-      Field of View minimum y coordinate in cm
-      Default: -1.0
+  --gpu-target-input-memory / cfg:gpu_target_input_memory    &lt;type 'int'&gt;
+      GPU memory in bytes to aim for as input for backprojection chunking
+      Default: 134217728
   --detector-pixel-width / cfg:detector_pixel_width    &lt;type 'float'&gt;
       Detector pixel width in cm (-1 for auto)
       Default: -1
-  --load-gpu-binary-path / cfg:load_gpu_binary_path    &lt;type 'str'&gt;
-      Path to load compiled CUDA kernels from
-      Default: 
-  --load-gpu-init-path / cfg:load_gpu_init_path    &lt;type 'str'&gt;
-      Path to load optional CUDA init code from
-      Default: 
-  --proj-filter-width / cfg:proj_filter_width    &lt;type 'int'&gt;
-      FDK projection filter resolution, must be a power of two.
-      Default: -1
-  --x-max / cfg:x_max    &lt;type 'float'&gt;
-      Field of View maximum x coordinate in cm
-      Default: 1.0
   --chunk-size / cfg:chunk_size    &lt;type 'int'&gt;
       Number of z slices in reconstruction chunks
       Default: -1
   --x-voxels / cfg:x_voxels    &lt;type 'int'&gt;
       Field of View resolution in x
       Default: 512
-  --gpu-target-threads / cfg:gpu_target_threads    &lt;type 'int'&gt;
-      Number of CUDA kernel threads to aim for per block
-      Default: 256
-  --angle-start / cfg:angle_start    &lt;type 'float'&gt;
-      Which angle to begin from
-      Default: 0.0
-  --checksum / cfg:checksum    &lt;type 'int'&gt;
-      Level of checksums to enable
-      Default: 0
-  --y-max / cfg:y_max    &lt;type 'float'&gt;
-      Field of View maximum y coordinate in cm
-      Default: 1.0
+  --proj-chunk-size / cfg:proj_chunk_size    &lt;type 'int'&gt;
+      CUDA FDK number of projections processed at a time.
+      Default: 1
   --detector-pixel-height / cfg:detector_pixel_height    &lt;type 'float'&gt;
       Detector pixel height in cm (-1 for auto)
       Default: -1
-  --filter / cfg:filter    &lt;type 'str'&gt;
-      Type of projection filter to apply
-      Default: none
-  --source-distance / cfg:source_distance    &lt;type 'float'&gt;
-      Distance in cm from source to isocenter
-      Default: 3.0
-  --x-min / cfg:x_min    &lt;type 'float'&gt;
-      Field of View minimum x coordinate in cm
-      Default: -1.0
+  --load-gpu-init-path / cfg:load_gpu_init_path    &lt;type 'str'&gt;
+      Path to load optional CUDA init code from
+      Default: 
 </PRE>
 
 <P>
@@ -427,6 +433,8 @@ Configurable settings are available in the output of:
   --npy-save-output / cfg:npy_save_output    &lt;type 'str'&gt;
       Output saver to format and write output data to one or more files
       Default: 
+  --help / -H 
+      Show this help
   --log-path / -l / cfg:log_path    &lt;type 'str'&gt;
       Log file path (empty for stdout)
       Default: 
@@ -459,8 +467,6 @@ Configurable settings are available in the output of:
   --complex-precision / cfg:complex_precision    &lt;type 'str'&gt;
       Select internal complex data type (precision)
       Default: complex64
-  --help / -H 
-      Show this help
   --timelog / cfg:timelog    &lt;type 'str'&gt;
       Log execution times
       Default: default
@@ -542,6 +548,9 @@ Configurable settings are available in the output of:
   --npy-load-input / cfg:npy_load_input    &lt;type 'str'&gt;
       Input loader to parse and read input data into array
       Default: 
+  --gpu-target-input-memory / cfg:gpu_target_input_memory    &lt;type 'int'&gt;
+      GPU memory in bytes to aim for as input for backprojection chunking
+      Default: 134217728
   --z-max / cfg:z_max    &lt;type 'float'&gt;
       Field of View maximum z coordinate in cm
       Default: 1.0
@@ -592,6 +601,9 @@ Configurable settings are available in the output of:
   --angle-start / cfg:angle_start    &lt;type 'float'&gt;
       Which angle to begin from
       Default: 0.0
+  --proj-chunk-size / cfg:proj_chunk_size    &lt;type 'int'&gt;
+      CUDA FDK number of projections processed at a time.
+      Default: 1
   --checksum / cfg:checksum    &lt;type 'int'&gt;
       Level of checksums to enable
       Default: 0
@@ -637,6 +649,8 @@ Configurable settings are available in the output of:
   --npy-save-output / cfg:npy_save_output    &lt;type 'str'&gt;
       Output saver to format and write output data to one or more files
       Default: 
+  --help / -H 
+      Show this help
   --log-path / -l / cfg:log_path    &lt;type 'str'&gt;
       Log file path (empty for stdout)
       Default: 
@@ -662,8 +676,6 @@ Configurable settings are available in the output of:
   --complex-precision / cfg:complex_precision    &lt;type 'str'&gt;
       Select internal complex data type (precision)
       Default: complex64
-  --help / -H 
-      Show this help
   --timelog / cfg:timelog    &lt;type 'str'&gt;
       Log execution times
       Default: default
@@ -745,6 +757,9 @@ Configurable settings are available in the output of:
   --npy-load-input / cfg:npy_load_input    &lt;type 'str'&gt;
       Input loader to parse and read input data into array
       Default: 
+  --gpu-target-input-memory / cfg:gpu_target_input_memory    &lt;type 'int'&gt;
+      GPU memory in bytes to aim for as input for backprojection chunking
+      Default: 134217728
   --z-max / cfg:z_max    &lt;type 'float'&gt;
       Field of View maximum z coordinate in cm
       Default: 1.0
