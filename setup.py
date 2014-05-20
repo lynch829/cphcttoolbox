@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # setup - setuptools install helper
-# Copyright (C) 2011-2012  The Cph CT Toolbox Project lead by Brian Vinter
+# Copyright (C) 2011-2014  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -111,6 +111,8 @@ if __name__ == '__main__':
         requires=project_requires,
         extras_require=project_extras,
         packages=find_packages(),
+        # Include any *.cu or *.cl kernel files found inside all packages
+        package_data={'': ['*.cu', '*.cl']},
         include_package_data=True,
         scripts=core_scripts,
         data_files=[(os.path.join('share', 'doc', install_name),
