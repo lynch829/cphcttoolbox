@@ -32,8 +32,7 @@
 import sys
 
 from cphct.cone.conf import default_cone_npy_conf, default_cone_npy_opts, \
-    enable_conf_option, enable_conf_option, engine_opts, engine_conf, \
-    parse_setup, ParseError
+    enable_conf_option, engine_opts, engine_conf, parse_setup, ParseError
 from cphct.cone.npy.io import fill_cone_npy_conf
 from cphct.cone.npycore.utils import general_tool_helper, default_tool_opts, \
     default_init_tool as init_tool, default_exit_tool as exit_tool, \

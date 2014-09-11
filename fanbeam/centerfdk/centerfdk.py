@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# centerfdk - center slice fdk reconstruction wrapper
-# Copyright (C) 2011  The Cph CT Toolbox Project lead by Brian Vinter
+# centerfdk - Center slice FDK reconstruction wrapper
+# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -34,7 +34,8 @@ import sys
 
 from cphct.fan.centerfdk.conf import parse_setup, engine_opts, \
     engine_conf, default_centerfdk_npy_opts, default_centerfdk_cu_opts, \
-    default_centerfdk_npy_conf, default_centerfdk_cu_conf, ParseError
+    default_centerfdk_cl_opts, default_centerfdk_npy_conf, \
+    default_centerfdk_cu_conf, default_centerfdk_cl_conf, ParseError
 
 app_names = ['centerfdk']
 
@@ -45,6 +46,7 @@ if __name__ == '__main__':
     base_cfg = {}
     base_cfg.update(default_centerfdk_npy_conf())
     base_cfg.update(default_centerfdk_cu_conf())
+    base_cfg.update(default_centerfdk_cl_conf())
 
     # Override default value for engine
 
@@ -52,6 +54,7 @@ if __name__ == '__main__':
     base_opts = {}
     base_opts.update(default_centerfdk_npy_opts())
     base_opts.update(default_centerfdk_cu_opts())
+    base_opts.update(default_centerfdk_cl_opts())
 
     # Override default no-op action for engine
 
@@ -60,7 +63,7 @@ if __name__ == '__main__':
         base_cfg = parse_setup(sys.argv, app_names, base_opts, base_cfg)
     except ParseError, err:
         print 'ERROR: %s' % err
-        sys.exit(1)
+        sys.exit(2)
     engine = base_cfg['engine']
     if engine == 'numpy':
         from npycenterfdk import main
@@ -72,12 +75,18 @@ if __name__ == '__main__':
         cfg = default_centerfdk_cu_conf()
         opts = default_centerfdk_cu_opts()
         app_names.append('cucenterfdk')
+    elif engine == 'opencl':
+        from clcenterfdk import main
+        cfg = default_centerfdk_cl_conf()
+        opts = default_centerfdk_cl_opts()
+        app_names.append('clcenterfdk')
     else:
         print 'Unknown engine: %s' % engine
-        sys.exit(1)
+        sys.exit(2)
     try:
         cfg = parse_setup(sys.argv, app_names, opts, cfg)
     except ParseError, err:
         print 'ERROR: %s' % err
-        sys.exit(1)
-    main(cfg, opts)
+        sys.exit(2)
+    exit_code = main(cfg, opts)
+    sys.exit(exit_code)

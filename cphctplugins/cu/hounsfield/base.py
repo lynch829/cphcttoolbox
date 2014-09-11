@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# hounsfield - hounsfield plugin to scale voxel data to hounsfield units (HU)
-# Copyright (C) 2012-2013  The Cph CT Toolbox Project lead by Brian Vinter
+# base - hounsfield plugin to scale voxel data to hounsfield units (HU)
+# Copyright (C) 2012-2014  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -27,14 +27,16 @@
 # -- END_HEADER ---
 #
 
-"""hounsfield plugin to scale voxel data to hounsfield units (HU)"""
+"""Base hounsfield plugin functions to scale voxel data to hounsfield
+units (HU)
+"""
 
 import os
 
 from cphct.npycore import zeros
 from cphct.plugins import get_plugin_var
 from cphct.cu.core import gpuarray, get_gpu_layout, generate_gpu_init, \
-    load_kernel_source, compile_kernels, cuda
+    load_kernels_source, compile_kernels
 
 # Internal plugin state for individual plugin instances
 
@@ -57,16 +59,16 @@ def __make_gpu_kernels(conf):
     """
 
     rt_const = {}
-    rt_const['int'] = ['x_voxels', 'y_voxels', 'z_voxels', 'chunk_size']
+    rt_const['int'] = ['x_voxels', 'y_voxels', 'chunk_size']
     rt_const['float'] = []
     rt_const['str'] = []
 
-    cu_kernel_path = '%s/base.cu' % os.path.dirname(__file__)
+    cu_kernels_path = '%s/base.cu' % os.path.dirname(__file__)
 
-    kernel_code = generate_gpu_init(conf, rt_const)
-    kernel_code += load_kernel_source(cu_kernel_path)
+    kernels_code = generate_gpu_init(conf, rt_const)
+    kernels_code += load_kernels_source(cu_kernels_path)
 
-    (_, kernels, _) = compile_kernels(conf, kernel_code)
+    (_, kernels, _) = compile_kernels(conf, kernels_code)
 
     return kernels
 
@@ -96,6 +98,9 @@ def plugin_init(conf, raw_voxel_water):
         If CUDA kernel didn't compile 
     """
 
+    __plugin_state__['name'] = __name__
+
+    gpu_module = conf['gpu']['module']
     fdt = conf['data_type']
     npy_raw_voxel_water = zeros(1, dtype=fdt)
     if raw_voxel_water == 'raw_voxel_water':
@@ -108,8 +113,9 @@ def plugin_init(conf, raw_voxel_water):
     __plugin_state__['gpu_layout'] = get_gpu_layout(conf['y_voxels'],
             conf['x_voxels'], conf['gpu_target_threads'])
     __plugin_state__['gpu_kernels'] = __make_gpu_kernels(conf)
+
     if not __plugin_state__['gpu_kernels']:
-        raise cuda.CompileError('no valid gpu compute kernels found!')
+        raise gpu_module.LogicError('no valid gpu compute kernels found!')
 
 
 def plugin_exit(conf, raw_voxel_water):

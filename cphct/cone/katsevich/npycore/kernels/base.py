@@ -37,7 +37,7 @@ from cphct.log import logging
 
 from cphct.npycore import zeros, zeros_like, arange, int32, sin, cos, \
     arctan, sqrt, interp, convolve, clip, floor, ceil
-from cphct.npycore.io import save_auto, get_npy_data
+from cphct.npycore.io import get_npy_data
 
 
 def flat_diff_chunk_vector(

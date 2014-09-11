@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# io - cuda specific input/ouput helpers
-# Copyright (C) 2011-2012  The Cph CT Toolbox Project lead by Brian Vinter
+# io - CUDA specific input/ouput helpers
+# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -37,7 +37,7 @@ from cphct.fan.centerfdk.npycore.io import fill_centerfdk_npycore_conf
 def fill_centerfdk_cu_conf(conf):
     """Remaining configuration after handling command line options.
     Casts all floating point results using float data type from conf.
-    This version is specifically for the cuda engine.
+    This version is specifically for the CUDA engine.
 
     Parameters
     ----------
@@ -47,7 +47,7 @@ def fill_centerfdk_cu_conf(conf):
     Returns
     -------
     output : dict
-        Returns configuration dictionary filled with cuda specific settings.
+        Returns configuration dictionary filled with CUDA specific settings.
     """
 
     fill_fan_cu_conf(conf)

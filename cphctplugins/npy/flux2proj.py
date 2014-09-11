@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # flux2proj - plugin to convert measured intensities to attenuation projections
-# Copyright (C) 2012-2013  The Cph CT Toolbox Project lead by Brian Vinter
+# Copyright (C) 2012-2014  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -32,7 +32,7 @@ attenuation projections.
 """
 
 from cphct.npycore import allowed_data_types
-from cphct.npycore.io import load_helper_proj
+from cphct.npycore.io import load_helper_proj, get_npy_data
 from cphct.npycore.utils import check_norm, flux_to_proj
 from cphct.plugins import get_plugin_var
 
@@ -84,8 +84,8 @@ def plugin_init(
         a suitable projection file nor
         a single value compatible with dtype_norm,
         if zero norm is greater than air norm or
-        if air_ref_pixel is set not a valid (y,x) index
-        
+        if air_ref_pixel is set not a valid (y,x) index or
+        if air_ref_pixel is outside the first projection bounding box
     """
 
     # Transform dtype_norm string to dtype
@@ -111,6 +111,28 @@ def plugin_init(
         air_ref_list = air_ref_pixel.split(',')
         air_ref_pixel = (int(air_ref_list[0].strip('(').strip()),
                          int(air_ref_list[1].strip(')').strip()))
+
+        # Check if air_ref_pixel is within the first detector bounding box
+
+        detector_boundingboxes = get_npy_data(conf,
+                'detector_boundingboxes')
+
+        # NOTE: Right now we only support air ref pixels
+        # that is inside the first projection bounding box
+
+        if detector_boundingboxes is not None and (air_ref_pixel[0]
+                < detector_boundingboxes[0, 0, 0] or air_ref_pixel[0]
+                > detector_boundingboxes[0, 0, 1] or air_ref_pixel[1]
+                < detector_boundingboxes[0, 1, 0] or air_ref_pixel[1]
+                > detector_boundingboxes[0, 1, 1]):
+
+            msg_ln1 = 'air_ref_pixel: %s must be inside' \
+                % str(air_ref_pixel)
+            msg_ln2 = 'first projection chunk: (%s, %s)' \
+                % (str(detector_boundingboxes[0, 0, 1]),
+                   str(detector_boundingboxes[0, 1, 1]))
+
+            raise ValueError('%s\n%s' % (msg_ln1, msg_ln2))
 
     check_norm(zero_norm_matrix, air_norm_matrix)
     __plugin_state__['zero_norm'] = zero_norm_matrix
@@ -193,9 +215,14 @@ def preprocess_input(
     if not hasattr(input_data, 'dtype'):
         raise ValueError('invalid flux_to_proj preprocess input array')
 
-    return (flux_to_proj(input_data, zero_norm, air_norm,
-            (conf['detector_rows'], conf['detector_columns'],
-            air_ref_pixel), out=input_data), input_meta)
+    return (flux_to_proj(
+        input_data,
+        zero_norm,
+        air_norm,
+        (conf['detector_rows'], conf['detector_columns']),
+        air_ref_pixel=air_ref_pixel,
+        out=input_data,
+        ), input_meta)
 
 
 if __name__ == '__main__':

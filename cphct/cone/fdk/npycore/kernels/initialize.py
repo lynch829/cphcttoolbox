@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# initialize - numpy specific initialization helpers
-# Copyright (C) 2011-2012  The Cph CT Toolbox Project lead by Brian Vinter
+# initialize - NumPy specific initialization helpers
+# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -27,7 +27,7 @@
 # -- END_HEADER ---
 #
 
-"""Numpy specific kernel initialization helper functions"""
+"""NumPy specific kernel initialization helper functions"""
 
 from cphct.npycore import zeros
 from cphct.npycore.io import npy_alloc, get_npy_data
@@ -72,7 +72,7 @@ def __generate_proj_filter_matrix(
 
 def init_recon(conf, fdt):
     """
-    Initialize data structures for numpy FDK reconstruction
+    Initialize data structures for NumPy FDK reconstruction
 
     Parameters
     ----------
@@ -84,7 +84,7 @@ def init_recon(conf, fdt):
     Returns
     -------
     output : dict
-       Returns configuration dictionary filled with numpy FDK reconstruction
+       Returns configuration dictionary filled with NumPy FDK reconstruction
        data structures
     """
 

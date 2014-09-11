@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# base - numpy specific FDK reconstruction kernels
-# Copyright (C) 2011-2012  The CT-Toolbox Project lead by Brian Vinter
+# base - NumPy specific FDK reconstruction kernels
+# Copyright (C) 2011-2013  The CT-Toolbox Project lead by Brian Vinter
 #
 # This file is part of CT-Toolbox.
 #
@@ -31,7 +31,7 @@
 
 from cphct.npycore import radians, cos, sin, arctan, dot, divide, \
     zeros, ones, array, hstack, vstack, fft, real, rint, int32, \
-    meshgrid, sqrt, allowed_data_types
+    meshgrid, sqrt
 from cphct.npycore.io import get_npy_data, save_auto
 from cphct.npycore.utils import log_checksum
 from cphct.npycore.misc import linear_coordinates
@@ -40,7 +40,7 @@ from cphct.log import logging
 from cphct.misc import timelog
 
 
-# These are basic numpy functions exposed through numpyext to use same numpy
+# These are basic NumPy functions exposed through npycore to use same NumPy
 
 def __rotation_matrix(
     phi,
@@ -347,7 +347,7 @@ def generate_detector_boundingboxes(conf, fdt):
     chunk_size_cm = (z_max - z_min) / z_voxels * chunk_size
 
     detector_boundingboxes = zeros((chunks, 2, 2),
-                                   dtype=allowed_data_types['uint32'])
+                                   dtype=int32)
     detector_boundingboxes[:, 1, 0] = 0
     detector_boundingboxes[:, 1, 1] = detector_columns
 
@@ -748,13 +748,13 @@ def reconstruct_proj(
 
         timelog.set(conf, 'verbose', 'proj_save')
         fd = open(conf['save_filtered_projs_data_path'], 'r+b', 0)
-        fd.seek(fdt(0).nbytes * proj['index'] * proj_data.shape[0]
+        fd.seek(fdt(0).nbytes * proj_index * proj_data.shape[0]
                 * proj_data.shape[1])
         save_auto(fd, proj_data)
         fd.close()
         timelog.log(conf, 'verbose', 'proj_save')
 
-    # Numpy FDK operates on flat arrays
+    # NumPy FDK operates on flat arrays
 
     flat_proj_data = proj_data.ravel()
 

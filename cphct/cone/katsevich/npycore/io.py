@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# io - numpy core specific input/ouput helpers
-# Copyright (C) 2011-2012  The Cph CT Toolbox Project lead by Brian Vinter
+# io - NumPy core specific input/ouput helpers
+# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -27,17 +27,113 @@
 # -- END_HEADER ---
 #
 
-"""Numpy core specific input/output helper functions"""
+"""NumPy core specific input/output helper functions"""
 
-from cphct.npycore import pi, cos, tan, ceil
-from cphct.npycore.io import get_npy_size
+import os
+
+from cphct.io import expand_path
+from cphct.npycore import pi, cos, tan, ceil, zeros
+from cphct.npycore.io import npy_alloc, get_npy_data
+from cphct.npycore.utils import supported_proj_filters, \
+    generate_proj_filter
 from cphct.cone.katsevich.io import fill_katsevich_conf
+
+
+def __set_proj_filter_array(conf, fdt):
+    """
+    Set projection filter array used when filtering projections
+    prior to reconstruction.
+
+    Parameters
+    ----------
+    conf : dict
+        Configuration dictionary.
+
+    Returns
+    -------
+    output : conf
+       Configuration dictionary.
+    
+    Raises
+    ------
+    ValueError
+       If conf['proj_filter'] is neither a filepath 
+       nor in the list of supported filters
+       Or if conf['proj_filter_width'] is less than conf['detector_columns']
+    """
+
+    proj_filter_path = expand_path(conf['working_directory'],
+                                   conf['proj_filter'])
+
+    if conf['proj_filter'] != 'skip':
+        if os.path.isfile(proj_filter_path):
+            raise ValueError("custom filter files are not yet supported here!")
+            try:
+                proj_filter_array = fromfile(proj_filter_path,
+                        dtype=fdt)
+                
+                # TODO: consider width like for FDK?
+                
+                #__update_proj_filter_width(conf, len(proj_filter_array))
+                
+            except Exception:
+                msg = 'Invalid projection filter file: \'%s\' ' \
+                    % proj_filter_path
+                raise ValueError(msg)
+        elif conf['proj_filter'] in supported_proj_filters("katsevich"):
+
+            # TODO: integrate dhilbert in generate_proj_filter?
+
+            #__update_proj_filter_width(conf)
+            #proj_filter_array = generate_proj_filter(conf['proj_filter'
+            #        ], conf['proj_filter_width'],
+            #        conf['proj_filter_scale'],
+            #        conf['proj_filter_nyquist_fraction'], fdt)
+
+            # Hilbert helper values
+
+            proj_filter_array = zeros(conf['kernel_width'], dtype=fdt)
+
+            # We use a simplified hilbert kernel for now
+
+            kernel_radius = conf['kernel_radius']
+            for i in xrange(conf['kernel_width']):
+                proj_filter_array[i] = (1.0 - cos(pi * (i - kernel_radius - 0.5))) \
+                                   / (pi * (i - kernel_radius - 0.5))
+            conf['proj_filter_width'] = conf['detector_columns']
+
+        else:
+            msg = 'proj_filter: \'%s\' is neither a filepath ' \
+                % conf['proj_filter'] \
+                + 'nor in allowed projection filters: %s' \
+                % supported_proj_filters("katsevich")
+            raise ValueError(msg)
+
+        if conf['proj_filter_width'] < conf['detector_columns']:
+            msg = 'Projection filter width to small: %s, ' \
+                % conf['proj_filter_width'] \
+                + 'must be >= the number of detector columns: %s' \
+                % conf['detector_columns']
+            raise ValueError(msg)
+
+        npy_alloc(conf, 'proj_filter_array', proj_filter_array)
+    else:
+
+        # Still set helper variables for other functions to use
+
+        # TODO: consider width like for FDK?
+
+        #__update_proj_filter_width(conf)
+
+        pass
+
+    return conf
 
 
 def fill_katsevich_npycore_conf(conf):
     """Remaining configuration after handling command line options.
     Casts all floating point results using float data type from conf.
-    This version is for the shared numpy core.
+    This version is for the shared NumPy core.
 
     Parameters
     ----------
@@ -47,7 +143,7 @@ def fill_katsevich_npycore_conf(conf):
     Returns
     -------
     output : dict
-        Returns configuration dictionary filled with numpy core settings.
+        Returns configuration dictionary filled with NumPy core settings.
     """
 
     fill_katsevich_conf(conf)
@@ -153,6 +249,7 @@ def fill_katsevich_npycore_conf(conf):
 
     # Always add two half rotations of overscan - not all projections are used
 
+    conf['core_turns'] = conf['total_turns']
     conf['total_turns'] += 1
 
     conf['total_projs'] = int(conf['total_turns']
@@ -183,5 +280,9 @@ def fill_katsevich_npycore_conf(conf):
     conf['extra_filter_projs'] = 1
     conf['filter_in_projs'] = conf['filter_out_projs'] \
         + conf['extra_filter_projs']
+
+    # Initialize projection filter array based on conf settings
+
+    __set_proj_filter_array(conf, fdt)
 
     return conf

@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# fdk - fdk reconstruction wrapper
-# Copyright (C) 2011  The Cph CT Toolbox Project lead by Brian Vinter
+# fdk - FDK reconstruction wrapper
+# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -32,8 +32,8 @@
 import sys
 
 from cphct.cone.fdk.conf import parse_setup, engine_opts, engine_conf, \
-    default_fdk_npy_opts, default_fdk_cu_opts, default_fdk_npy_conf, \
-    default_fdk_cu_conf, ParseError
+    default_fdk_npy_opts, default_fdk_cu_opts, default_fdk_cl_opts, \
+    default_fdk_npy_conf, default_fdk_cu_conf, default_fdk_cl_conf, ParseError
 
 app_names = ['fdk']
 
@@ -44,6 +44,7 @@ if __name__ == '__main__':
     base_cfg = {}
     base_cfg.update(default_fdk_npy_conf())
     base_cfg.update(default_fdk_cu_conf())
+    base_cfg.update(default_fdk_cl_conf())
 
     # Override default value for engine
 
@@ -51,6 +52,7 @@ if __name__ == '__main__':
     base_opts = {}
     base_opts.update(default_fdk_npy_opts())
     base_opts.update(default_fdk_cu_opts())
+    base_opts.update(default_fdk_cl_opts())
 
     # Override default no-op action for engine
 
@@ -59,7 +61,7 @@ if __name__ == '__main__':
         base_cfg = parse_setup(sys.argv, app_names, base_opts, base_cfg)
     except ParseError, err:
         print 'ERROR: %s' % err
-        sys.exit(1)
+        sys.exit(2)
     engine = base_cfg['engine']
     if engine == 'numpy':
         from npyfdk import main
@@ -71,12 +73,18 @@ if __name__ == '__main__':
         cfg = default_fdk_cu_conf()
         opts = default_fdk_cu_opts()
         app_names.append('cufdk')
+    elif engine == 'opencl':
+        from clfdk import main
+        cfg = default_fdk_cl_conf()
+        opts = default_fdk_cl_opts()
+        app_names.append('clfdk')
     else:
         print 'Unknown engine: %s' % engine
-        sys.exit(1)
+        sys.exit(2)
     try:
         cfg = parse_setup(sys.argv, app_names, opts, cfg)
     except ParseError, err:
         print 'ERROR: %s' % err
-        sys.exit(1)
-    main(cfg, opts)
+        sys.exit(2)
+    exit_code = main(cfg, opts)
+    sys.exit(exit_code)

@@ -4,7 +4,7 @@
 #
 # --- BEGIN_HEADER ---
 #
-# misc - numpy core misc helpers
+# misc - NumPy core misc helpers
 # Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
@@ -27,9 +27,9 @@
 # -- END_HEADER ---
 #
 
-"""Numpy core misc helper functions"""
+"""NumPy core misc helper functions"""
 
-from cphct.npycore import ones, linspace, atleast_1d, broadcast_arrays
+from cphct.npycore import linspace
 
 
 def size_from_shape(shape):
@@ -112,7 +112,7 @@ def linear_coordinates(
     if coord_count == 1:
         coord_min = coord_max = 0.5 * (coord_max + coord_min)
     elif coord_bounds:
-        center_off = 0.5 * ((coord_max - coord_min) / coord_count)
+        center_off = (0.5 * (coord_max - coord_min) / coord_count)
         coord_min, coord_max = coord_min + center_off, coord_max - center_off
     return fdt(linspace(coord_min, coord_max, coord_count, endpoint=True))
 
@@ -128,7 +128,7 @@ def slide_forward(buffer, steps):
     The point of the function is to slide the contents without an implicit
     copy of (nearly) the entire buffer. We could in principle do a simple
         buffer[:-steps] = buffer[steps:]
-    but due to potential overlap numpy will issue a copy of the right hand
+    but due to potential overlap NumPy will issue a copy of the right hand
     side rather than just using a simple view.
     To work around this we update the entries explicitly in turn.
     

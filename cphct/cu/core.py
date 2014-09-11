@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# core - cuda specific core helpers
-# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
+# core - CUDA specific core helpers
+# Copyright (C) 2011-2014  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -75,6 +75,32 @@ def __get_gpu_specs(gpu_context):
     return dict([(str(i), j) for (i, j) in specs.items()])
 
 
+def __check_gpu_environment(gpu_specs):
+    """Check if the GPU environment is usable.
+
+    Parameters
+    ----------
+    gpu_specs : dict
+       Gpu device specs dictionary
+
+    Returns
+    -------
+    output : dict
+       True if GPU environment is usable.
+
+    Raises
+    ------
+    pycuda.driver.RuntimeError:
+       If GPU environment lack 3D grid support
+    """
+
+    if not 'MAX_GRID_DIM_Z' in gpu_specs or gpu_specs['MAX_GRID_DIM_Z'] \
+        < 1:
+        raise cuda.RuntimeError('GPU environment lack 3D grid support')
+
+    return True
+
+
 def __switch_active_gpu(conf, gpu_id):
     """
     This activates the GPU with *gpu_id* deactivating the previous active GPU if any.
@@ -85,7 +111,8 @@ def __switch_active_gpu(conf, gpu_id):
     ----------
     conf : dict
         Configuration dictionary.
-
+    gpu_id : int
+        GPU device index
     Returns
     -------
     output : dict
@@ -101,6 +128,7 @@ def __switch_active_gpu(conf, gpu_id):
 
         old_active_context = __get_active_gpu_context(conf)
         if not old_active_context is None:
+            del conf['gpu']['barrier']
             old_active_context.pop()
 
         # Set new active gpu id
@@ -111,6 +139,10 @@ def __switch_active_gpu(conf, gpu_id):
         # Activate context
 
         new_active_context.push()
+
+        # Expose sync function for e.g. timelog to use independently of engine
+
+        conf['gpu']['barrier'] = lambda cfg: gpu_barrier(cfg)
 
     return conf
 
@@ -159,6 +191,40 @@ def gpu_init_mod(conf):
     return conf
 
 
+def gpu_device_count(conf):
+    """Count the available GPU devices.
+
+    Parameters
+    ----------
+    conf : dict
+        Configuration dictionary.
+
+    Returns
+    -------
+    output : int
+        Returns the number of GPU devices.
+    """
+
+    return conf['gpu']['module'].Device.count()
+
+
+def gpu_mem_info(conf):
+    """Fetch the available and used GPU memory.
+
+    Parameters
+    ----------
+    conf : dict
+        Configuration dictionary.
+
+    Returns
+    -------
+    output : tuple
+        Returns a tuple of free and total GPU memory.
+    """
+
+    return conf['gpu']['module'].mem_get_info()
+
+
 def gpu_init_ctx(conf):
     """Initialize GPU context access. Sets gpu_context handle for further use.
 
@@ -174,18 +240,18 @@ def gpu_init_ctx(conf):
     """
 
     gpu_module = conf['gpu']['module']
-    cuda_device_index = conf['cuda_device_index']
+    gpu_device_index = conf['gpu_device_index']
 
     # Use tempdir for the CUDA compute cache documented in CUDA Toolkit Docs
 
-    os.environ["CUDA_CACHE_PATH"] = os.path.join(conf["temporary_directory"],
-                                                 '.nv', 'ComputeCache')
+    os.environ['CUDA_CACHE_PATH'] = \
+        os.path.join(conf['temporary_directory'], '.nv', 'ComputeCache')
 
     conf['gpu']['context'] = {}
-    conf['gpu']['context'][cuda_device_index] = \
-        gpu_module.Device(cuda_device_index).make_context()
+    conf['gpu']['context'][gpu_device_index] = \
+        gpu_module.Device(gpu_device_index).make_context()
 
-    __switch_active_gpu(conf, cuda_device_index)
+    __switch_active_gpu(conf, gpu_device_index)
 
     # We expect that all initialized GPU devices are the same
     # NOTE: When making support for multiple GPUs we must
@@ -194,7 +260,55 @@ def gpu_init_ctx(conf):
     conf['gpu']['specs'] = \
         __get_gpu_specs(__get_active_gpu_context(conf))
 
+    __check_gpu_environment(conf['gpu']['specs'])
+
     return conf
+
+
+def gpu_barrier(conf):
+    """Forces GPU barrier based on conf settings
+    
+    Parameters
+    ----------
+    conf : dict
+       Dictionary with configuration values.
+    """
+
+    if 'context' in conf['gpu']:
+        for gpu_id in conf['gpu']['context']:
+            conf['gpu']['context'][gpu_id].synchronize()
+
+
+def gpu_get_stream(conf, gpu_id=None):
+    """Create GPU stream used for async executions
+    
+    If *gpu_id* is None, conf['gpu']['active_id'] is used
+    
+    Parameters
+    ----------
+    conf : dict
+        Configuration dictionary.
+    gpu_id : int, optional
+        GPU device index
+
+    Returns
+    -------
+    output : pycuda.driver.Stream
+        Returns GPU stream for active GPU or *gpu_id*
+    """
+
+    org_gpu_id = None
+
+    if gpu_id is not None and conf['gpu']['active_id'] != gpu_id:
+        org_gpu_id = conf['gpu']['active_id']
+        __switch_active_gpu(conf, gpu_id)
+
+    output = conf['gpu']['module'].Stream()
+
+    if org_gpu_id is not None:
+        __switch_active_gpu(conf, org_gpu_id)
+
+    return output
 
 
 def gpu_exit(conf):
@@ -291,13 +405,13 @@ def replace_constants(text, remap, wrap=False):
     return res
 
 
-def load_kernels_cubin(cubin_load_path):
-    """Load kernel precompiled cubin kernel.
+def load_kernels_cubin(kernel_binary_path):
+    """Load precompiled CUDA kernels binary
 
     Parameters
     ----------
-    cubin_load_path : str
-       Filepath to cubin kernel
+    kernel_binary_path : str
+       Path to CUDA binary kernels
 
     Returns
     -------
@@ -306,44 +420,44 @@ def load_kernels_cubin(cubin_load_path):
     """
 
     output = None
-
     try:
-        output = cuda.module_from_file(cubin_load_path)
+        output = cuda.module_from_file(kernel_binary_path)
     except Exception, exc:
-        logging.error('faild to load precompiled module: %s' % exc)
+        logging.error('failed to load precompiled module: %s' % exc)
 
     return output
 
 
-def load_kernel_source(kernel_code_filepath):
-    """Load CUDA kernel source
+def load_kernels_source(kernels_code_path):
+    """Load CUDA kernels source
     
     Parameters
     ----------
-    cubin_load_path : str
-       Filepath to CUDA source
+    kernels_code_path : str
+       Path to CUDA kernels source
     
     Returns
     -------
     output : str
-       Returns the loaded CUDA source
+       Returns the loaded CUDA kernels source
     """
 
-    kernel_code = ''
+    kernels_code = ''
 
     try:
-        kernel_code_fd = open(kernel_code_filepath, 'r')
-        kernel_code += kernel_code_fd.read()
-        kernel_code_fd.close()
+        kernels_code_fd = open(kernels_code_path, 'r')
+        kernels_code += kernels_code_fd.read()
+        kernels_code_fd.close()
     except Exception, exc:
 
-        logging.error('faild to load CUDA kernel source: %s' % exc)
+        logging.error('failed to load CUDA kernel source: %s' % exc)
 
-    return kernel_code
+    return kernels_code
 
 
 def generate_gpu_init(conf, rt_const):
-    """Prepare GPU inlining of variables that are constant at kernel runtime.
+    """Define GPU helpers and inline variables 
+    that are constant at kernel runtime.
 
     Parameters
     ----------
@@ -359,6 +473,60 @@ def generate_gpu_init(conf, rt_const):
 
     output = \
         '''
+/* --- BEGIN CUDA HELPERS --- */
+
+/* Thread ID helpers
+CUDA vs OpenCL:
+ - blocks in grid are equivalent to groups
+ - threads in block is equivalent to local
+*/
+
+#define THREAD_ID_X (threadIdx.x)
+#define THREAD_ID_Y (threadIdx.y)
+#define THREAD_ID_Z (threadIdx.z)
+#define BLOCK_DIM_X (blockDim.x)
+#define BLOCK_DIM_Y (blockDim.y)
+#define BLOCK_DIM_Z (blockDim.z)
+#define BLOCK_ID_X (blockIdx.x)
+#define BLOCK_ID_Y (blockIdx.y)
+#define BLOCK_ID_Z (blockIdx.z)
+
+#define GET_GLOBAL_ID_X (BLOCK_ID_X * BLOCK_DIM_X + THREAD_ID_X)
+#define GET_GLOBAL_ID_Y (BLOCK_ID_Y * BLOCK_DIM_Y + THREAD_ID_Y)
+#define GET_GLOBAL_ID_Z (BLOCK_ID_Z * BLOCK_DIM_Z + THREAD_ID_Z)
+
+#define GET_LOCAL_ID_X (THREAD_ID_X)
+#define GET_LOCAL_ID_Y (THREAD_ID_Y)
+#define GET_LOCAL_ID_Z (THREAD_ID_Z)
+
+/* Keyword helpers 
+CUDA vs OpenCL:
+ - kernels are prefixed with __global__ vs __kernel 
+ - global memory args are prefixed with '' vs __global
+ - block shared mem is marked with __shared__ vs __local
+ - thread private mem is marked with '' vs __private
+ - functions are forced inline with __forceinline__ vs __inline
+ - device functions are prefixed with __device__ vs ''
+*/
+
+#define KERNEL __global__
+#define GLOBALMEM 
+#define SHAREDMEM __shared__
+#define PRIVATEMEM
+#define FORCEINLINE __forceinline__
+#define DEVICE __device__
+
+
+/* Thread memory syncronization within blocks:
+CUDA vs OpenCL:
+ - sync is issued with __syncthreads() vs barrier(flags)
+please read about the meaning of flags for correctness
+*/
+
+#define sync_shared_mem() __syncthreads()
+
+/* --- END CUDA HELPERS --- */
+
 /* --- BEGIN AUTOMATIC RUNTIME CONFIGURATION --- */
 
 '''
@@ -392,15 +560,15 @@ def generate_gpu_init(conf, rt_const):
     return output
 
 
-def compile_kernels(conf, kernel_code):
-    """Compile CUDA kernels from *kernel_code*
+def compile_kernels(conf, kernels_code):
+    """Compile CUDA kernels from *kernels_code*
 
     Parameters
     ----------
     conf : dict
        Configuration dictionary.
-    kernel_source : str
-       CUDA kernel source to compile
+    kernels_code : str
+       CUDA kernel source code to compile
         
     Returns
     -------
@@ -418,7 +586,7 @@ def compile_kernels(conf, kernel_code):
 
         # Escape any percent chars in the raw code before conf expansion
 
-        const_code = replace_constants(kernel_code, [('%', '%%')],
+        const_code = replace_constants(kernels_code, [('%', '%%')],
                 wrap=False)
         const_code = replace_constants(const_code,
                 conf['host_params_remap'])
@@ -446,14 +614,13 @@ def compile_kernels(conf, kernel_code):
         cubin_data = compiler.compile(const_code, options=nvcc_options,
                 arch=arch_opts, code=code_opts)
     except Exception, exc:
-
         logging.error('load compute kernels failed: %s' % exc)
         logging.debug(const_code)
 
     return (const_code, kernels, cubin_data)
 
 
-def gpu_kernel_auto_init(conf, rt_const):
+def gpu_kernels_auto_init(conf, rt_const):
     """Prepare CUDA kernels based on conf settings and *rt_const* entries
     
     Parameters
@@ -480,18 +647,18 @@ def gpu_kernel_auto_init(conf, rt_const):
             load_kernels_cubin(conf['load_gpu_binary_path'])
     elif conf['load_gpu_kernels_path']:
 
-        kernel_code = ''
+        kernels_code = ''
         if conf['load_gpu_init_path']:
-            gpu_init_fd = open(conf['load_gpu_init_path'], 'r')
-            kernel_code += gpu_init_fd.read()
-            gpu_init_fd.close()
+            kernels_code += \
+                load_kernels_source(conf['load_gpu_init_path'])
         else:
-            kernel_code += generate_gpu_init(conf, rt_const)
+            kernels_code += generate_gpu_init(conf, rt_const)
 
-        kernel_code += load_kernel_source(conf['load_gpu_kernels_path'])
+        kernels_code += load_kernels_source(conf['load_gpu_kernels_path'
+                ])
 
         (conf['const_code'], conf['cu_kernels'], conf['cubin_data']) = \
-            compile_kernels(conf, kernel_code)
+            compile_kernels(conf, kernels_code)
 
 
 def gpu_save_kernels(conf):
@@ -586,26 +753,31 @@ def gpu_array_alloc_offset(gpuarray_obj, offset, shape):
     gpuarray_obj : GPUArray
         A previously GPUArray wrapped linear chunk of device memory.
     offset : int
-        Offset GPUAarray elements in the flat memory space.
+        Offset GPUArray elements in the flat memory space.
     shape : tuple
-        Shape of the offsat GPUArray.
+        Shape of the offset GPUArray.
         
     Returns
     -------
     output : GPUArray
-        Returns *gpuarray_obj* offsat by *byteoffset*
+        Returns *gpuarray_obj* offset by *byteoffset*
     """
 
     byteoffset = offset * gpuarray_obj.dtype.itemsize
-    gpuarray_obj_offsat_ptr = gpu_pointer_from_array(gpuarray_obj) \
+    gpuarray_obj_offset_ptr = gpu_pointer_from_array(gpuarray_obj) \
         + byteoffset
-    offsat_gpuarray_obj = gpu_array_from_alloc(gpuarray_obj_offsat_ptr,
+    offset_gpuarray_obj = gpu_array_from_alloc(gpuarray_obj_offset_ptr,
             shape, gpuarray_obj.dtype)
 
-    return offsat_gpuarray_obj
+    return offset_gpuarray_obj
 
 
-def get_gpu_layout(rows, cols, max_gpu_threads_pr_block):
+def get_gpu_layout(
+    chunks,
+    rows,
+    cols,
+    max_gpu_threads_pr_block,
+    ):
     """
     Get GPU block layout based on rows and cols,
     and the number of threads pr. block. We aim at square layouts.
@@ -614,6 +786,8 @@ def get_gpu_layout(rows, cols, max_gpu_threads_pr_block):
    
     Parameters
     ----------
+    chunks : int
+       The number of chunks in the GPU grid layout
     rows : int
        The number of rows in the GPU grid layout
     cols : int
@@ -625,7 +799,7 @@ def get_gpu_layout(rows, cols, max_gpu_threads_pr_block):
     -------
     output : tuple
        Tuple of GPU block and grid dimension tuples on the form:
-       ((block_xdim, block_ydim, block_zdim), (grid_xdim, grid_ydim, 1))
+       ((block_xdim, block_ydim, block_zdim), (grid_xdim, grid_ydim, grid_zdim))
             
     Raises
     ------
@@ -669,6 +843,6 @@ def get_gpu_layout(rows, cols, max_gpu_threads_pr_block):
         raise ValueError('Wrong grid_ydim: %s' % grid_ydim)
 
     return ((int(block_xdim), int(block_ydim), 1), (int(grid_xdim),
-            int(grid_ydim), 1))
+            int(grid_ydim), int(chunks)))
 
 

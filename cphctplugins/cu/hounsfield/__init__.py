@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# __init__ - hounsfield cuda module init
-# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
+# __init__ - hounsfield CUDA module init
+# Copyright (C) 2012-2014  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -27,7 +27,7 @@
 # -- END_HEADER ---
 #
 
-"""Cph CT Toolbox hounsfield cuda module initializer"""
+"""Cph CT Toolbox Hounsfield CUDA module initializer"""
 
 __dummy = \
     '''This dummy right after the module doc string prevents PythonTidy

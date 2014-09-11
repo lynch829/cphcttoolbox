@@ -4,7 +4,7 @@
 #
 # --- BEGIN_HEADER ---
 #
-# conf - configuration helpers
+# conf - Configuration helpers
 # Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
@@ -48,10 +48,7 @@ from cphct.misc.timelog import allowed_timelogs
 # the public name to the internal name. Otherwise we just use a shared list of
 # strings.
 
-# TODO: enable opencl once it is supported
-# allowed_engines = {'numpy': 'npy', 'cuda': 'cu', 'opencl': 'ocl'}
-
-allowed_engines = {'numpy': 'npy', 'cuda': 'cu'}
+allowed_engines = {'numpy': 'npy', 'cuda': 'cu', 'opencl': 'cl'}
 allowed_scanning_paths = ['step', 'helix']
 allowed_detector_shapes = ['flat', 'curved']
 allowed_interpolation = ['point', 'linear']
@@ -826,13 +823,13 @@ def _shared_opts():
 
 
 def _npycore_opts():
-    """Shared numpy core options
+    """Shared NumPy core options
 
     Returns
     -------
     output : dict
         Returns a dictionary of options helper dictionaries for all engines
-        using a numpy core.
+        using a NumPy core.
     """
 
     opts = {
@@ -851,7 +848,7 @@ def _npycore_opts():
             'args': str,
             'handler': plugin_arg_values,
             'default': [],
-            'description': 'Apply specified numpy preprocessing to input ' \
+            'description': 'Apply specified NumPy preprocessing to input ' \
                 + 'array',
             },
         'npy_postprocess_output': {
@@ -860,7 +857,7 @@ def _npycore_opts():
             'args': str,
             'handler': plugin_arg_values,
             'default': [],
-            'description': 'Apply specified numpy postprocessing to output ' \
+            'description': 'Apply specified NumPy postprocessing to output ' \
                 + 'array',
             },
         'npy_save_output': {
@@ -878,12 +875,12 @@ def _npycore_opts():
 
 
 def _npy_opts():
-    """Numpy specific options
+    """NumPy specific options
 
     Returns
     -------
     output : dict
-        Returns a dictionary of numpy specific options helper dictionaries.
+        Returns a dictionary of NumPy specific options helper dictionaries.
     """
 
     opts = {}
@@ -897,7 +894,7 @@ def _cu_opts():
     Returns
     -------
     output : dict
-        Returns a dictionary of cuda specific options helper dictionaries.
+        Returns a dictionary of CUDA specific options helper dictionaries.
     """
 
     # gpu_target_threads is a helper to divide work between GPU cores. We have
@@ -923,7 +920,7 @@ def _cu_opts():
             'args': None,
             'handler': None,
             'default': {},
-            'description': 'State helper for use by cuda plugins',
+            'description': 'State helper for use by CUDA plugins',
             },
         'cu_preprocess_input': {
             'long': 'cu-preprocess-input',
@@ -931,7 +928,7 @@ def _cu_opts():
             'args': str,
             'handler': plugin_arg_values,
             'default': [],
-            'description': 'Apply specified cuda preprocessing to input array',
+            'description': 'Apply specified CUDA preprocessing to input array',
             },
         'cu_postprocess_output': {
             'long': 'cu-postprocess-output',
@@ -939,16 +936,16 @@ def _cu_opts():
             'args': str,
             'handler': plugin_arg_values,
             'default': [],
-            'description': 'Apply specified cuda postprocessing to output ' \
+            'description': 'Apply specified CUDA postprocessing to output ' \
                 + 'array',
             },
-        'cuda_device_index': {
-            'long': 'cuda-device-index',
+        'gpu_device_index': {
+            'long': 'gpu-device-index',
             'short': None,
             'args': int,
             'handler': int_value,
             'default': -1,
-            'description': 'Which CUDA device to use: -1 for auto',
+            'description': 'Which GPU device to use: -1 for auto',
             },
         'gpu_target_threads': {
             'long': 'gpu-target-threads',
@@ -956,7 +953,7 @@ def _cu_opts():
             'args': int,
             'handler': int_value,
             'default': 256,
-            'description': 'Number of CUDA kernel threads to aim for per ' \
+            'description': 'Number of GPU kernel threads to aim for per ' \
                 + 'block',
             },
         'gpu_target_filter_memory': {
@@ -992,7 +989,7 @@ def _cu_opts():
             'handler': str_value,
             'expander': path_expander,
             'default': '',
-            'description': 'Path to load optional CUDA init code from',
+            'description': 'Path to load optional GPU init code from',
             },
         'load_gpu_kernels_path': {
             'long': 'load-gpu-kernels-path',
@@ -1001,7 +998,7 @@ def _cu_opts():
             'handler': None,
             'expander': None,
             'default': None,
-            'description': 'Path to load CUDA kernels code from',
+            'description': 'Path to load GPU kernels code from',
             },
         'save_gpu_kernels_path': {
             'long': 'save-gpu-kernels-path',
@@ -1010,7 +1007,7 @@ def _cu_opts():
             'handler': str_value,
             'expander': path_expander,
             'default': '',
-            'description': 'Path to save runtime optimized CUDA kernels code ' \
+            'description': 'Path to save runtime optimized GPU kernels code ' \
                 + 'in',
             },
         'load_gpu_binary_path': {
@@ -1020,7 +1017,7 @@ def _cu_opts():
             'handler': str_value,
             'expander': path_expander,
             'default': '',
-            'description': 'Path to load compiled CUDA kernels from',
+            'description': 'Path to load compiled GPU kernels from',
             },
         'save_gpu_binary_path': {
             'long': 'save-gpu-binary-path',
@@ -1029,7 +1026,7 @@ def _cu_opts():
             'handler': str_value,
             'expander': path_expander,
             'default': '',
-            'description': 'Path to save runtime optimized compiled CUDA ' \
+            'description': 'Path to save runtime optimized compiled GPU ' \
                 + 'kernels in',
             },
         'host_params_remap': {
@@ -1038,7 +1035,7 @@ def _cu_opts():
             'args': float,
             'handler': None,
             'default': [],
-            'description': 'List of variables to auto remap in cuda kernel',
+            'description': 'List of variables to auto remap in GPU kernel',
             },
         'gpu': {
             'long': None,
@@ -1056,19 +1053,151 @@ def _cu_opts():
     return opts
 
 
-def _ocl_opts():
+def _cl_opts():
     """OpenCL specific options
 
     Returns
     -------
     output : dict
-        Returns a dictionary of opencl specific options helper dictionaries.
+        Returns a dictionary of OpenCL specific options helper dictionaries.
     """
 
-    ocl_opts = {}
+    cl_opts = {
+        'cl_plugin_state': {
+            'long': None,
+            'short': None,
+            'args': None,
+            'handler': None,
+            'default': {},
+            'description': 'State helper for use by OpenCL plugins',
+            },
+        'cl_preprocess_input': {
+            'long': 'cl-preprocess-input',
+            'short': None,
+            'args': str,
+            'handler': plugin_arg_values,
+            'default': [],
+            'description': 'Apply specified OpenCL preprocessing to input array',
+            },
+        'cl_postprocess_output': {
+            'long': 'cl-postprocess-output',
+            'short': None,
+            'args': str,
+            'handler': plugin_arg_values,
+            'default': [],
+            'description': 'Apply specified OpenCL postprocessing to output ' \
+                + 'array',
+            },
+        'gpu_device_index': {
+            'long': 'gpu-device-index',
+            'short': None,
+            'args': int,
+            'handler': int_value,
+            'default': -1,
+            'description': 'Which GPU device to use: -1 for auto',
+            },
+        'gpu_target_threads': {
+            'long': 'gpu-target-threads',
+            'short': None,
+            'args': int,
+            'handler': int_value,
+            'default': 256,
+            'description': 'Number of GPU kernel threads to aim for per ' \
+                + 'block',
+            },
+        'gpu_target_filter_memory': {
+            'long': 'gpu-target-filter-memory',
+            'short': None,
+            'args': int,
+            'handler': int_value,
+            'default': 256*2**20,
+            'description': 'GPU memory in bytes to aim for with projection ' \
+                + 'filter chunking',
+            },
+        'gpu_target_input_memory': {
+            'long': 'gpu-target-input-memory',
+            'short': None,
+            'args': int,
+            'handler': int_value,
+            'default': 128*2**20,
+            'description': 'GPU memory in bytes to aim for as input for ' \
+                + 'backprojection chunking',
+            },
+        'gpu_projs_only': {
+            'long': 'gpu-projs-only',
+            'short': None,
+            'args': bool,
+            'handler': bool_value,
+            'default': True,
+            'description': 'Keep partial results on the GPU - no copy to host',
+            },
+        'load_gpu_init_path': {
+            'long': 'load-gpu-init-path',
+            'short': None,
+            'args': str,
+            'handler': str_value,
+            'expander': path_expander,
+            'default': '',
+            'description': 'Path to load optional GPU init code from',
+            },
+        'load_gpu_kernels_path': {
+            'long': 'load-gpu-kernels-path',
+            'short': None,
+            'args': None,
+            'handler': None,
+            'expander': None,
+            'default': None,
+            'description': 'Path to load GPU kernels code from',
+            },
+        'save_gpu_kernels_path': {
+            'long': 'save-gpu-kernels-path',
+            'short': None,
+            'args': str,
+            'handler': str_value,
+            'expander': path_expander,
+            'default': '',
+            'description': 'Path to save runtime optimized GPU kernels code ' \
+                + 'in',
+            },
+        'load_gpu_binary_path': {
+            'long': 'load-gpu-binary-path',
+            'short': None,
+            'args': str,
+            'handler': str_value,
+            'expander': path_expander,
+            'default': '',
+            'description': 'Path to load compiled GPU kernels from',
+            },
+        'save_gpu_binary_path': {
+            'long': 'save-gpu-binary-path',
+            'short': None,
+            'args': str,
+            'handler': str_value,
+            'expander': path_expander,
+            'default': '',
+            'description': 'Path to save runtime optimized compiled GPU ' \
+                + 'kernels in',
+            },
+        'host_params_remap': {
+            'long': None,
+            'short': None,
+            'args': float,
+            'handler': None,
+            'default': [],
+            'description': 'List of variables to auto remap in GPU kernel',
+            },
+        'gpu': {
+            'long': None,
+            'short': None,
+            'args': None,
+            'handler': None,
+            'default': {},
+            'description': 'GPU handle for internal use',
+            },
+        }
     opts = {}
     opts.update(_npycore_opts())
-    opts.update(ocl_opts)
+    opts.update(cl_opts)
     return opts
 
 
@@ -1110,12 +1239,12 @@ def default_base_opts():
 
 
 def default_base_npy_opts():
-    """Numpy specific options
+    """NumPy specific options
 
     Returns
     -------
     output : dict
-        Returns a dictionary of base numpy options helper dictionaries.
+        Returns a dictionary of base NumPy options helper dictionaries.
     """
 
     opts = default_base_opts()
@@ -1124,16 +1253,30 @@ def default_base_npy_opts():
 
 
 def default_base_cu_opts():
-    """Cuda specific options
+    """CUDA specific options
 
     Returns
     -------
     output : dict
-        Returns a dictionary of base cuda options helper dictionaries.
+        Returns a dictionary of base CUDA options helper dictionaries.
     """
 
     opts = default_base_opts()
     opts.update(_cu_opts())
+    return opts
+
+
+def default_base_cl_opts():
+    """OpenCL specific options
+
+    Returns
+    -------
+    output : dict
+        Returns a dictionary of base OpenCL options helper dictionaries.
+    """
+
+    opts = default_base_opts()
+    opts.update(_cl_opts())
     return opts
 
 
@@ -1186,12 +1329,12 @@ def default_base_conf():
 
 
 def default_base_npy_conf():
-    """Configuration dictionary with default values for numpy engine
+    """Configuration dictionary with default values for NumPy engine
 
     Returns
     -------
     output : dict
-        Returns a dictionary of base numpy conf settings.
+        Returns a dictionary of base NumPy conf settings.
     """
 
     conf = default_base_conf()
@@ -1201,16 +1344,31 @@ def default_base_npy_conf():
 
 
 def default_base_cu_conf():
-    """Configuration dictionary with default values for cuda engine
+    """Configuration dictionary with default values for CUDA engine
 
     Returns
     -------
     output : dict
-        Returns a dictionary of base cuda conf settings.
+        Returns a dictionary of base CUDA conf settings.
     """
 
     conf = default_base_conf()
     for (key, val) in default_base_cu_opts().items():
+        conf[key] = val['default']
+    return conf
+
+
+def default_base_cl_conf():
+    """Configuration dictionary with default values for OpenCL engine
+
+    Returns
+    -------
+    output : dict
+        Returns a dictionary of base OpenCL conf settings.
+    """
+
+    conf = default_base_conf()
+    for (key, val) in default_base_cl_opts().items():
         conf[key] = val['default']
     return conf
 

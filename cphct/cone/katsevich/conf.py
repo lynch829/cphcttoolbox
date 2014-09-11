@@ -4,7 +4,7 @@
 #
 # --- BEGIN_HEADER ---
 #
-# conf - shared katsevich configuration helpers
+# conf - Shared katsevich configuration helpers
 # Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
@@ -37,6 +37,7 @@ from incorrectly moving following comments above module doc string'''
 # parent module
 
 from cphct.cone.conf import *
+from cphct.npycore.utils import supported_proj_filters
 
 
 def _shared_opts():
@@ -60,33 +61,79 @@ def _shared_opts():
 
     # TODO: select detector_rebin_rows dynamically within that range unless set
 
-    opts = {'detector_rebin_rows': {
-        'long': 'detector-rebin-rows',
-        'short': None,
-        'args': int,
-        'handler': int_value,
-        'default': 64,
-        'description': 'Number of rows in projection rebinning',
-        }, 'progress_per_turn': {
-        'long': 'progress-per-turn',
-        'short': 'P',
-        'args': float,
-        'handler': float_value,
-        'default': 1.0,
-        'description': 'Geometrical helix pitch in cm, i.e. conveyor ' + \
-                'progress per turn',
-        }}
+    # TODO: actually extend to support full manual filtering
+    # TODO: actually enable and use the filter helpers like in FDK
+
+    opts = {
+        'proj_filter': {
+            'long': 'proj-filter',
+            'short': None,
+            'args': str,
+            'handler': str,
+            'default': 'dhilbert',
+            'description': 'Projection filter filepath ' \
+                + 'or one of the builtin filters:\n\t%s' \
+                % supported_proj_filters("katsevich"),
+            },
+        'proj_filter_width': {
+            #'long': 'proj-filter-width',
+            'long': None,
+            'short': None,
+            'args': int,
+            'handler': int_pow2_value,
+            'default': -1,
+            'description': 'Katsevich projection filter resolution, ' \
+                + 'must be a power of two.',
+            },
+        'proj_filter_scale': {
+            #'long': 'proj-filter-scale',
+            'long': None,
+            'short': None,
+            'args': float,
+            'handler': float_value,
+            'default': -1.0,
+            'description': 'Katsevich projection filter scale ' \
+                + '(used when generating builtin filters)',
+            },
+        'proj_filter_nyquist_fraction': {
+            #'long': 'proj-filter-nyquist-fraction',
+            'long': None,
+            'short': None,
+            'args': float,
+            'handler': float_value,
+            'default': 1.0,
+            'description': 'Katsevich projection filter Nyquist fraction ' \
+                + '(used when generating builtin filters)',
+            },
+        'detector_rebin_rows': {
+            'long': 'detector-rebin-rows',
+            'short': None,
+            'args': int,
+            'handler': int_value,
+            'default': 64,
+            'description': 'Number of rows in projection rebinning',
+            },
+        'progress_per_turn': {
+            'long': 'progress-per-turn',
+            'short': 'P',
+            'args': float,
+            'handler': float_value,
+            'default': 1.0,
+            'description': 'Geometrical helix pitch in cm, i.e. conveyor ' + \
+            'progress per turn',
+            }
+        }
 
     return opts
 
 
 def _npy_opts():
-    """Katsevich options for numpy engine
+    """Katsevich options for NumPy engine
 
     Returns
     -------
     output : dict
-        Returns a dictionary of numpy specific options helper dictionaries.
+        Returns a dictionary of NumPy specific options helper dictionaries.
     """
 
     opts = {}
@@ -94,12 +141,25 @@ def _npy_opts():
 
 
 def _cu_opts():
-    """Katsevich options for cuda engine
+    """Katsevich options for CUDA engine
 
     Returns
     -------
     output : dict
-        Returns a dictionary of cuda specific options helper dictionaries.
+        Returns a dictionary of CUDA specific options helper dictionaries.
+    """
+
+    opts = {}
+    return opts
+
+
+def _cl_opts():
+    """Katsevich options for OpenCL engine
+
+    Returns
+    -------
+    output : dict
+        Returns a dictionary of OpenCL specific options helper dictionaries.
     """
 
     opts = {}
@@ -121,12 +181,12 @@ def default_katsevich_opts():
 
 
 def default_katsevich_npy_opts():
-    """Numpy specific options
+    """NumPy specific options
 
     Returns
     -------
     output : dict
-        Returns a dictionary of katsevich numpy options helper dictionaries.
+        Returns a dictionary of katsevich NumPy options helper dictionaries.
     """
 
     opts = default_cone_npy_opts()
@@ -136,17 +196,32 @@ def default_katsevich_npy_opts():
 
 
 def default_katsevich_cu_opts():
-    """Cuda specific options
+    """CUDA specific options
 
     Returns
     -------
     output : dict
-        Returns a dictionary of katsevich cuda options helper dictionaries.
+        Returns a dictionary of katsevich CUDA options helper dictionaries.
     """
 
     opts = default_cone_cu_opts()
     opts.update(_shared_opts())
     opts.update(_cu_opts())
+    return opts
+
+
+def default_katsevich_cl_opts():
+    """OpenCL specific options
+
+    Returns
+    -------
+    output : dict
+        Returns a dictionary of katsevich OpenCL options helper dictionaries.
+    """
+
+    opts = default_cone_cl_opts()
+    opts.update(_shared_opts())
+    opts.update(_cl_opts())
     return opts
 
 
@@ -166,12 +241,12 @@ def default_katsevich_conf():
 
 
 def default_katsevich_npy_conf():
-    """Configuration dictionary with default values for numpy engine
+    """Configuration dictionary with default values for NumPy engine
 
     Returns
     -------
     output : dict
-        Returns a dictionary of katsevich numpy conf settings.
+        Returns a dictionary of katsevich NumPy conf settings.
     """
 
     conf = {}
@@ -181,15 +256,30 @@ def default_katsevich_npy_conf():
 
 
 def default_katsevich_cu_conf():
-    """Configuration dictionary with default values for cuda engine
+    """Configuration dictionary with default values for CUDA engine
 
     Returns
     -------
     output : dict
-        Returns a dictionary of katsevich cuda conf settings.
+        Returns a dictionary of katsevich CUDA conf settings.
     """
 
     conf = {}
     for (key, val) in default_katsevich_cu_opts().items():
+        conf[key] = val['default']
+    return conf
+
+
+def default_katsevich_cl_conf():
+    """Configuration dictionary with default values for OpenCL engine
+
+    Returns
+    -------
+    output : dict
+        Returns a dictionary of katsevich OpenCL conf settings.
+    """
+
+    conf = {}
+    for (key, val) in default_katsevich_cl_opts().items():
         conf[key] = val['default']
     return conf

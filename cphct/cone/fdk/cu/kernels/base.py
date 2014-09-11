@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# base - numpy specific FDK reconstruction kernels
-# Copyright (C) 2011-2012  The CT-Toolbox Project lead by Brian Vinter
+# base - CUDA specific FDK reconstruction kernels
+# Copyright (C) 2011-2013  The CT-Toolbox Project lead by Brian Vinter
 #
 # This file is part of CT-Toolbox.
 #
@@ -27,9 +27,9 @@
 # -- END_HEADER ---
 #
 
-"""Step and shoot cone beam CT kernels using the FDK algorithm"""
+"""Step and shoot cone beam CT CUDA kernels using the FDK algorithm"""
 
-from cphct.npycore import real, radians
+from cphct.npycore import real, radians, allowed_data_types
 
 from cphct.npycore.io import get_npy_data, save_auto
 from cphct.npycore.utils import log_checksum
@@ -42,9 +42,10 @@ from cphct.misc import timelog
 
 def weight_proj(
     gpu_proj,
-    gpu_proj_row_offset,
+    proj_row_offset,
     gpu_weight,
-    gpu_kernels,
+    gpu_kernel,
+    gpu_stream,
     gpu_layouts,
     ):
     """
@@ -54,12 +55,14 @@ def weight_proj(
     ----------
     gpu_proj : gpuarray
        Projection data
-    gpu_proj_row_offset : gpuarray
+    proj_row_offset : uint32
        Projection row offset for current chunk
     gpu_weight : gpuarray
        Projection weight
-    gpu_kernels : pycuda.compiler.SourceModule
-       Compiled CUDA kernels
+    gpu_kernel : pycuda.driver.Function
+       Compiled and prepared CUDA kernel
+    gpu_stream : pycda.driver.Stream
+       Stream used for async prepared execution
     gpu_layouts : dict
        Grid and block layouts for kernel execution
        
@@ -69,19 +72,27 @@ def weight_proj(
        GPU weighted complex projection
     """
 
-    gpu_weight_proj = gpu_kernels.get_function('weight_proj')
+    (block, grid) = gpu_layouts['proj']
 
-    gpu_weight_proj(gpu_proj, gpu_proj_row_offset, gpu_weight,
-                    block=gpu_layouts['proj'][0],
-                    grid=gpu_layouts['proj'][1])
+    gpu_kernel.prepared_async_call(
+        grid,
+        block,
+        gpu_stream,
+        gpu_alloc_from_array(gpu_proj),
+        proj_row_offset,
+        gpu_alloc_from_array(gpu_weight),
+        shared_size=0,
+        )
 
     return gpu_proj
 
 
 def proj_to_complex(
     gpu_complex_proj,
-    gpu_proj_data,
-    gpu_kernels,
+    gpu_proj,
+    nr_proj_rows,
+    gpu_kernel,
+    gpu_stream,
     gpu_layouts,
     ):
     """
@@ -91,10 +102,14 @@ def proj_to_complex(
     ----------
     gpu_complex_proj : gpuarray
        Complex projection data
-    gpu_proj_data : gpuarray
+    gpu_proj : gpuarray
        Float projection data
-    gpu_kernels : pycuda.compiler.SourceModule
-       Compiled CUDA kernels
+    nr_proj_rows : uint32
+       Number of active projection rows
+    gpu_kernel : pycuda.driver.Function
+       Compiled and prepared CUDA kernel
+    gpu_stream : pycda.driver.Stream
+       Stream used for async prepared execution
     gpu_layouts : dict
        Grid and block layouts for kernel execution
        
@@ -104,11 +119,17 @@ def proj_to_complex(
        GPU complex projection data
     """
 
-    gpu_proj_to_complex = gpu_kernels.get_function('proj_to_complex')
+    (block, grid) = gpu_layouts['proj_to_complex']
 
-    gpu_proj_to_complex(gpu_complex_proj, gpu_proj_data,
-                        block=gpu_layouts['proj'][0],
-                        grid=gpu_layouts['proj'][1])
+    gpu_kernel.prepared_async_call(
+        grid,
+        block,
+        gpu_stream,
+        gpu_alloc_from_array(gpu_complex_proj),
+        gpu_alloc_from_array(gpu_proj),
+        nr_proj_rows,
+        shared_size=0,
+        )
 
     return gpu_complex_proj
 
@@ -116,7 +137,8 @@ def proj_to_complex(
 def filter_proj(
     gpu_complex_proj,
     gpu_filter,
-    gpu_kernels,
+    gpu_kernel,
+    gpu_stream,
     gpu_layouts,
     ):
     """
@@ -128,8 +150,10 @@ def filter_proj(
        Complex projection data
     gpu_filter : gpuarray
        Filter array
-    gpu_kernels : pycuda.compiler.SourceModule
-       Compiled CUDA kernels
+    gpu_kernel : pycuda.driver.Function
+       Compiled and prepared CUDA kernel
+    gpu_stream : pycda.driver.Stream
+       Stream used for async prepared execution
     gpu_layouts : dict
        Grid and block layouts for kernel execution
        
@@ -139,19 +163,25 @@ def filter_proj(
        GPU filtered complex projection
     """
 
-    gpu_filter_proj = gpu_kernels.get_function('filter_proj')
+    (block, grid) = gpu_layouts['proj_filter']
 
-    gpu_filter_proj(gpu_complex_proj, gpu_filter,
-                    block=gpu_layouts['proj_filter'][0],
-                    grid=gpu_layouts['proj_filter'][1])
+    gpu_kernel.prepared_async_call(
+        grid,
+        block,
+        gpu_stream,
+        gpu_alloc_from_array(gpu_complex_proj),
+        gpu_alloc_from_array(gpu_filter),
+        shared_size=0,
+        )
 
     return gpu_complex_proj
 
 
 def complex_to_proj(
-    gpu_proj_data,
-    gpu_complex_data,
-    gpu_kernels,
+    gpu_proj,
+    gpu_complex_proj,
+    gpu_kernel,
+    gpu_stream,
     gpu_layouts,
     ):
     """
@@ -159,12 +189,14 @@ def complex_to_proj(
     
     Parameters
     ----------
-    gpu_proj_data : gpuarray
+    gpu_proj : gpuarray
        float projection data
     gpu_complex_proj : gpuarray
        complex projection data
-    gpu_kernels : pycuda.compiler.SourceModule
-       Compiled CUDA kernels
+    gpu_kernel : pycuda.driver.Function
+       Compiled and prepared CUDA kernel
+    gpu_stream : pycda.driver.Stream
+       Stream used for async prepared execution
     gpu_layouts : dict
        Grid and block layouts for kernel execution
        
@@ -174,20 +206,26 @@ def complex_to_proj(
        GPU float projection data
     """
 
-    gpu_complex_to_proj = gpu_kernels.get_function('complex_to_proj')
+    (block, grid) = gpu_layouts['proj']
 
-    gpu_complex_to_proj(gpu_proj_data, gpu_complex_data,
-                        block=gpu_layouts['proj'][0],
-                        grid=gpu_layouts['proj'][1])
+    gpu_kernel.prepared_async_call(
+        grid,
+        block,
+        gpu_stream,
+        gpu_alloc_from_array(gpu_proj),
+        gpu_alloc_from_array(gpu_complex_proj),
+        shared_size=0,
+        )
 
-    return gpu_proj_data
+    return gpu_proj
 
 
 def generate_volume_weight(
     gpu_volume_weight_matrix,
     gpu_combined_matrix,
-    gpu_proj_angle_rad,
-    gpu_kernels,
+    proj_angle_rad,
+    gpu_kernel,
+    gpu_stream,
     gpu_layouts,
     ):
     """
@@ -199,10 +237,12 @@ def generate_volume_weight(
        Volume weight matrix
     gpu_combined_matrix : gpuarray
        Combined matrix
-    gpu_proj_angle_rad : gpuarray
+    proj_angle_rad : float32
        Projection angle in radians
-    gpu_kernels : pycuda.compiler.SourceModule
-       Compiled CUDA kernels
+    gpu_kernel : pycuda.driver.Function
+       Compiled and prepared CUDA kernel
+    gpu_stream : pycda.driver.Stream
+       Stream used for async prepared execution
     gpu_layouts : dict
        Grid and block layouts for kernel execution
        
@@ -212,28 +252,32 @@ def generate_volume_weight(
        GPU volume weight matrix
     """
 
-    gpu_generate_volume_weight = \
-        gpu_kernels.get_function('generate_volume_weight')
+    (block, grid) = gpu_layouts['backproject']
 
-    gpu_generate_volume_weight(gpu_volume_weight_matrix,
-                               gpu_combined_matrix, gpu_proj_angle_rad,
-                               block=gpu_layouts['backproject'][0],
-                               grid=gpu_layouts['backproject'][1])
+    gpu_kernel.prepared_async_call(
+        grid,
+        block,
+        gpu_stream,
+        gpu_alloc_from_array(gpu_volume_weight_matrix),
+        gpu_alloc_from_array(gpu_combined_matrix),
+        proj_angle_rad,
+        shared_size=0,
+        )
 
     return gpu_volume_weight_matrix
 
 
 def backproject_proj(
     gpu_recon_chunk,
-    gpu_proj_data,
-    gpu_proj_row_offset,
-    gpu_proj_angle_rad,
-    gpu_chunk_index,
+    gpu_proj,
+    proj_row_offset,
+    chunk_index,
     gpu_z_voxel_coordinates,
     gpu_transform_matrix,
     gpu_combined_matrix,
     gpu_volume_weight_matrix,
-    gpu_kernels,
+    gpu_kernel,
+    gpu_stream,
     gpu_layouts,
     ):
     """
@@ -243,13 +287,11 @@ def backproject_proj(
     ----------
     gpu_recon_chunk : gpuarray
        Reconstructed volume chunk
-    gpu_proj_data : gpuarray
+    gpu_proj : gpuarray
        Projection data to reconstruct
-    gpu_proj_row_offset : gpuarray
+    proj_row_offset : uint32
        Projection row offset for current chunk
-    gpu_proj_angle_rad : gpuarray
-       Projection angle in radians
-    gpu_chunk_index : gpuarray
+    chunk_index : uint32
        Chunk index to reconstruct
     gpu_z_voxel_coordinates : gpuarray
        Array with z voxel coordinates
@@ -257,8 +299,10 @@ def backproject_proj(
        Matrix with x,y voxel coordinates
     gpu_volume_weight_matrix : gpuarray
        Matrix with volume weights
-    gpu_kernels : pycuda.compiler.SourceModule
-       Compiled CUDA kernels
+    gpu_kernel : pycuda.driver.Function
+       Compiled and prepared CUDA kernel
+    gpu_stream : pycda.driver.Stream
+       Stream used for async prepared execution
     gpu_layouts : dict
        Grid and block layouts for kernel execution
        
@@ -268,20 +312,21 @@ def backproject_proj(
        Reconstructed volume chunk
     """
 
-    gpu_backproject = gpu_kernels.get_function('backproject')
+    (block, grid) = gpu_layouts['backproject']
 
-    gpu_backproject(
-        gpu_recon_chunk,
-        gpu_proj_data,
-        gpu_proj_row_offset,
-        gpu_proj_angle_rad,
-        gpu_chunk_index,
-        gpu_z_voxel_coordinates,
-        gpu_transform_matrix,
-        gpu_combined_matrix,
-        gpu_volume_weight_matrix,
-        block=gpu_layouts['backproject'][0],
-        grid=gpu_layouts['backproject'][1],
+    gpu_kernel.prepared_async_call(
+        grid,
+        block,
+        gpu_stream,
+        gpu_alloc_from_array(gpu_recon_chunk),
+        gpu_alloc_from_array(gpu_proj),
+        proj_row_offset,
+        chunk_index,
+        gpu_alloc_from_array(gpu_z_voxel_coordinates),
+        gpu_alloc_from_array(gpu_transform_matrix),
+        gpu_alloc_from_array(gpu_combined_matrix),
+        gpu_alloc_from_array(gpu_volume_weight_matrix),
+        shared_size=0,
         )
 
     return gpu_recon_chunk
@@ -302,9 +347,14 @@ def reconstruct_proj(conf, proj, fdt):
         The dictionary of configuration options.
     """
 
-    # Get gpu module
+    # Get data types
 
-    gpu_module = conf['gpu']['module']
+    uint32 = allowed_data_types['uint32']
+
+    # Get gpu streams
+
+    active_gpu_id = conf['gpu']['active_id']
+    gpu_stream = conf['app_state']['gpu']['streams'][active_gpu_id]
 
     # Get gpu layouts
 
@@ -312,32 +362,49 @@ def reconstruct_proj(conf, proj, fdt):
 
     # Get gpu kernels
 
-    gpu_kernels = conf['cu_kernels']
+    gpu_weight_proj_kernel = conf['app_state']['gpu']['prepared_kernels'
+            ]['weight_proj']
+    gpu_proj_to_complex_kernel = conf['app_state']['gpu'
+            ]['prepared_kernels']['proj_to_complex']
+    gpu_filter_proj_kernel = conf['app_state']['gpu']['prepared_kernels'
+            ]['filter_proj']
+    gpu_complex_to_proj_kernel = conf['app_state']['gpu'
+            ]['prepared_kernels']['complex_to_proj']
+    gpu_generate_volume_weight_kernel = conf['app_state']['gpu'
+            ]['prepared_kernels']['generate_volume_weight']
+    gpu_backproject_kernel = conf['app_state']['gpu']['prepared_kernels'
+            ]['backproject']
 
     # Get GPU data structures
 
-    gpu_proj_angle_rad = get_cu_data(conf, 'proj_angle_rad')
-    gpu_proj_angle_rad_alloc = gpu_alloc_from_array(gpu_proj_angle_rad)
     gpu_projs_data = get_cu_data(conf, 'projs_data')
     gpu_complex_proj = get_cu_data(conf, 'complex_proj')
-    gpu_complex_proj_alloc = gpu_alloc_from_array(gpu_complex_proj)
     gpu_proj_weight_matrix = get_cu_data(conf, 'proj_weight_matrix')
     gpu_proj_filter_array = get_cu_data(conf, 'proj_filter_array')
     gpu_volume_weight_matrix = get_cu_data(conf, 'volume_weight_matrix')
     gpu_transform_matrix = get_cu_data(conf, 'transform_matrix')
     gpu_combined_matrix = get_cu_data(conf, 'combined_matrix')
-    gpu_chunk_index = get_cu_data(conf, 'chunk_index')
-    gpu_proj_row_offset = get_cu_data(conf, 'proj_row_offset')
     gpu_recon_chunk = get_cu_data(conf, 'recon_chunk')
     gpu_z_voxel_coordinates = get_cu_data(conf, 'z_voxel_coordinates')
 
-    # Get CPU proj meta data
+    # Get recon chunk index
 
-    proj_angle_rad = radians(fdt(proj['angle']))
+    chunk_index = conf['app_state']['chunk']['idx']
 
     # Get projection index
 
     proj_index = conf['app_state']['backproject']['proj_idx']
+
+    # Get projection angle
+
+    proj_angle_rad = radians(fdt(proj['angle']))
+
+    # Get projection row offset
+
+    proj_row_offset = uint32(conf['app_state']['projs']['boundingbox'
+                             ][0, 0])
+    nr_proj_rows = uint32(conf['app_state']['projs']['boundingbox'][0,
+                          1] - proj_row_offset)
 
     # Offset gpu projection data according to current projection
 
@@ -347,17 +414,6 @@ def reconstruct_proj(conf, proj, fdt):
     gpu_proj_shape = (gpu_projs_data.shape[1], gpu_projs_data.shape[2])
     gpu_proj_data = gpu_array_alloc_offset(gpu_projs_data,
             gpu_proj_offset, gpu_proj_shape)
-
-    # Determine number of projection rows from boundingbox if defined
-
-    if not 'max_rows' in conf['app_state']['projs']:
-        proj_row_count = conf['detector_rows']
-    else:
-        proj_row_count = conf['app_state']['projs']['max_rows']
-
-    # Move proj_angle_rad to GPU
-
-    gpu_module.memcpy_htod(gpu_proj_angle_rad_alloc, proj_angle_rad)
 
     if proj['filtered']:
         pass
@@ -372,9 +428,14 @@ def reconstruct_proj(conf, proj, fdt):
 
         if conf['proj_weight'] != 'skip':
             timelog.set(conf, 'verbose', 'proj_weight', barrier=True)
-            weight_proj(gpu_proj_data, gpu_proj_row_offset,
-                        gpu_proj_weight_matrix, gpu_kernels,
-                        gpu_layouts)
+            weight_proj(
+                gpu_proj_data,
+                proj_row_offset,
+                gpu_proj_weight_matrix,
+                gpu_weight_proj_kernel,
+                gpu_stream,
+                gpu_layouts,
+                )
             timelog.log(conf, 'verbose', 'proj_weight', barrier=True)
 
         if conf['checksum']:
@@ -391,29 +452,33 @@ def reconstruct_proj(conf, proj, fdt):
 
             fft_plan = conf['app_state']['gpu']['fft_plan']
 
-            gpu_module.memset_d8(gpu_complex_proj_alloc, 0,
-                                 gpu_complex_proj.nbytes)
-
             # Transform projection from float to complex
 
-            proj_to_complex(gpu_complex_proj, gpu_proj_data,
-                            gpu_kernels, gpu_layouts)
+            proj_to_complex(
+                gpu_complex_proj,
+                gpu_proj_data,
+                nr_proj_rows,
+                gpu_proj_to_complex_kernel,
+                gpu_stream,
+                gpu_layouts,
+                )
 
             fft_plan.execute(gpu_complex_proj, data_out=None,
-                             inverse=False, batch=int(proj_row_count),
+                             inverse=False, batch=int(nr_proj_rows),
                              wait_for_finish=None)
 
             filter_proj(gpu_complex_proj, gpu_proj_filter_array,
-                        gpu_kernels, gpu_layouts)
+                        gpu_filter_proj_kernel, gpu_stream, gpu_layouts)
 
             fft_plan.execute(gpu_complex_proj, data_out=None,
-                             inverse=True, batch=int(proj_row_count),
+                             inverse=True, batch=int(nr_proj_rows),
                              wait_for_finish=None)
 
             # Transform projection from complex to float
 
             complex_to_proj(gpu_proj_data, gpu_complex_proj,
-                            gpu_kernels, gpu_layouts)
+                            gpu_complex_to_proj_kernel, gpu_stream,
+                            gpu_layouts)
 
             timelog.log(conf, 'verbose', 'proj_filter', barrier=True)
 
@@ -465,24 +530,29 @@ def reconstruct_proj(conf, proj, fdt):
             gpu_volume_weight_matrix.set(get_npy_data(conf,
                     'volume_weight_matrix')[proj_index])
         else:
-            generate_volume_weight(gpu_volume_weight_matrix,
-                                   gpu_combined_matrix,
-                                   gpu_proj_angle_rad, gpu_kernels,
-                                   gpu_layouts)
+            generate_volume_weight(
+                gpu_volume_weight_matrix,
+                gpu_combined_matrix,
+                proj_angle_rad,
+                gpu_generate_volume_weight_kernel,
+                gpu_stream,
+                gpu_layouts,
+                )
+
         timelog.log(conf, 'verbose', 'volume_weight', barrier=True)
 
     timelog.set(conf, 'verbose', 'backproject', barrier=True)
     backproject_proj(
         gpu_recon_chunk,
         gpu_proj_data,
-        gpu_proj_row_offset,
-        gpu_proj_angle_rad,
-        gpu_chunk_index,
+        proj_row_offset,
+        chunk_index,
         gpu_z_voxel_coordinates,
         gpu_transform_matrix,
         gpu_combined_matrix,
         gpu_volume_weight_matrix,
-        gpu_kernels,
+        gpu_backproject_kernel,
+        gpu_stream,
         gpu_layouts,
         )
 

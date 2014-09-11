@@ -97,7 +97,7 @@ def preprocess_input(
 
     Parameters
     ----------
-    gpu_input_data : ndarray
+    gpu_input_data : gpuarray
         array to process.
     input_meta : list of dict
         List of meta data dictionaries matching gpu_input_data.
@@ -108,7 +108,7 @@ def preprocess_input(
 
     Returns
     -------
-    output : tuple of ndarray and list
+    output : tuple of gpuarray and list
         Returns a tuple of the same data array and meta list.
 
     Raises
@@ -155,7 +155,7 @@ def postprocess_output(
 
     Parameters
     ----------
-    gpu_output_data : ndarray
+    gpu_output_data : gpuarray
         array to process.
     output_meta : list of dict
         List of meta data dictionaries matching gpu_output_data.
@@ -166,7 +166,7 @@ def postprocess_output(
 
     Returns
     -------
-    output : tuple of ndarray and dict
+    output : tuple of gpuarray and dict
         Returns a tuple of the same data array and meta list.
 
     Raises

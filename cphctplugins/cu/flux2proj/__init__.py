@@ -4,7 +4,7 @@
 #
 # --- BEGIN_HEADER ---
 #
-# __init__ - flux2proj cuda module init
+# __init__ - flux2proj CUDA module init
 # Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
@@ -27,7 +27,7 @@
 # -- END_HEADER ---
 #
 
-"""Cph CT Toolbox flux2proj cuda module initializer"""
+"""Cph CT Toolbox flux2proj CUDA module initializer"""
 
 __dummy = \
     '''This dummy right after the module doc string prevents PythonTidy

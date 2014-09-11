@@ -29,8 +29,6 @@
 
 """CenterFDK specific input/output helper functions"""
 
-from cphct.conf import allowed_values, allowed_scanning_paths
-
 def fill_centerfdk_conf(conf):
     """Remaining configuration after handling command line options.
     Expand all relative paths to absolute paths

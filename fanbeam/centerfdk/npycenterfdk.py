@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# npycenterfdk - numpy center slice fdk reconstruction
-# Copyright (C) 2011-2012  The CT-Toolbox Project lead by Brian Vinter
+# npycenterfdk - NumPy center slice fdk reconstruction
+# Copyright (C) 2011-2013  The CT-Toolbox Project lead by Brian Vinter
 #
 # This file is part of CT-Toolbox.
 #
@@ -27,7 +27,7 @@
 # -- END_HEADER ---
 #
 
-"""Circular fan beam CT using the center slice FDK algorithm in numpy"""
+"""Circular fan beam CT using the center slice FDK algorithm in NumPy"""
 
 import sys
 import traceback
@@ -37,7 +37,7 @@ from cphct.log import logging, allowed_log_levels, setup_log, \
     default_level, log_scan_geometry
 from cphct.misc import timelog
 
-# These are basic numpy functions exposed through npy to use same numpy
+# These are basic NumPy functions exposed through npy to use same NumPy
 
 from cphct.npycore.io import get_npy_data, get_npy_total_size, \
     npy_free_all
@@ -62,7 +62,7 @@ def reconstruct_volume(conf, fdt, npy_plugins):
     fdt : dtype
         Float data type (internal precision)
     npy_plugins : dict
-        A dictionary of numpy plugins to use
+        A dictionary of NumPy plugins to use
 
     Returns
     -------
@@ -167,7 +167,8 @@ def reconstruct_volume(conf, fdt, npy_plugins):
                     except Exception:
                         logging.error('Load plugin %s failed:\n%s'
                                 % (name, traceback.format_exc()))
-                        sys.exit(1)
+                        conf['app_state']['exit_code'] = 1
+                        return conf
 
                 if conf['checksum']:
                     chunk_view = projs_data.ravel()
@@ -175,17 +176,17 @@ def reconstruct_volume(conf, fdt, npy_plugins):
                                  chunk_view.size)
 
                 # Preprocess current chunk of projections
-                # with configured numpy plugins
+                # with configured NumPy plugins
 
                 hook = 'npy_preprocess_input'
                 req_npy_plugins = npy_plugins.get(hook, [])
 
-                logging.info('Preprocessing with %s numpy plugin(s)'
+                logging.info('Preprocessing with %s NumPy plugin(s)'
                              % ', '.join([plug[0] for plug in
                              npy_plugins[hook]]))
 
                 for (name, plugin_mod, args, kwargs) in req_npy_plugins:
-                    logging.debug('Preprocessing chunk with %s numpy plugin'
+                    logging.debug('Preprocessing chunk with %s NumPy plugin'
                                    % name)
                     try:
                         timelog.set(conf, 'default', 'npy_preprocess')
@@ -199,9 +200,10 @@ def reconstruct_volume(conf, fdt, npy_plugins):
 
                         timelog.log(conf, 'default', 'npy_preprocess')
                     except Exception:
-                        logging.error('Preprocess numpy plugin %s failed:\n%s'
+                        logging.error('Preprocess NumPy plugin %s failed:\n%s'
                                  % (name, traceback.format_exc()))
-                        sys.exit(1)
+                        conf['app_state']['exit_code'] = 1
+                        return conf
 
                 if conf['checksum']:
                     chunk_view = projs_data.ravel()
@@ -238,16 +240,16 @@ def reconstruct_volume(conf, fdt, npy_plugins):
                         log_checksum('Recon chunk', recon_chunk_view,
                                 recon_chunk_view.size)
 
-            # Postprocess current chunk of results with configured numpy plugins
+            # Postprocess current chunk of results with configured NumPy plugins
 
             hook = 'npy_postprocess_output'
             req_npy_plugins = npy_plugins.get(hook, [])
-            logging.info('Postprocessing with %s numpy plugin(s)'
+            logging.info('Postprocessing with %s NumPy plugin(s)'
                          % ', '.join([plug[0] for plug in
                          npy_plugins[hook]]))
 
             for (name, plugin_mod, args, kwargs) in req_npy_plugins:
-                logging.debug('Postprocessing chunk with %s numpy plugin'
+                logging.debug('Postprocessing chunk with %s NumPy plugin'
                                % name)
                 try:
                     timelog.set(conf, 'default', 'npy_postprocess')
@@ -261,9 +263,10 @@ def reconstruct_volume(conf, fdt, npy_plugins):
 
                     timelog.log(conf, 'default', 'npy_postprocess')
                 except Exception:
-                    logging.error('Postprocess numpy plugin %s failed:\n%s'
+                    logging.error('Postprocess NumPy plugin %s failed:\n%s'
                                    % (name, traceback.format_exc()))
-                    sys.exit(1)
+                    conf['app_state']['exit_code'] = 1
+                    return conf
 
             if conf['checksum']:
                 recon_chunk_view = recon_chunk.ravel()
@@ -293,7 +296,8 @@ def reconstruct_volume(conf, fdt, npy_plugins):
                 except Exception:
                     logging.error('Save plugin %s failed:\n%s' % (name,
                                   traceback.format_exc()))
-                    sys.exit(1)
+                    conf['app_state']['exit_code'] = 1
+                    return conf
 
     return conf
 
@@ -307,6 +311,11 @@ def main(conf, opts):
         A dictionary of configuration options.
     opts : dict
         A dictionary of application options.
+
+    Returns
+    -------
+    output : int
+        An integer exit code for the run, 0 means success
     """
 
     if conf['log_level']:
@@ -355,24 +364,25 @@ def main(conf, opts):
 
     init_recon(conf, fdt)
 
-    # Load numpy plugins
+    # Load NumPy plugins
 
     timelog.set(conf, 'verbose', 'npy_plugin_init')
     (npy_plugins, errors) = load_plugins(app_names, 'npy', conf)
     for (key, val) in errors.items():
         for (plugin_name, load_err) in val:
-            logging.error('loading %s %s numpy plugin failed : %s'
+            logging.error('loading %s %s NumPy plugin failed : %s'
                           % (key, plugin_name, load_err))
-            sys.exit(1)
+            conf['app_state']['exit_code'] = 1
+            return conf['app_state']['exit_code']
 
-    # Prepare configured numpy plugins
+    # Prepare configured NumPy plugins
 
     hook = 'npy_plugin_init'
-    logging.info('Initializing %s numpy plugin(s)' % ', '.join([plug[0]
+    logging.info('Initializing %s NumPy plugin(s)' % ', '.join([plug[0]
                  for plug in npy_plugins[hook]]))
     req_npy_plugins = npy_plugins.get(hook, [])
     for (name, plugin_mod, args, kwargs) in req_npy_plugins:
-        logging.debug('Initialize %s numpy plugin' % name)
+        logging.debug('Initialize %s NumPy plugin' % name)
         try:
 
             # Always pass conf as first arg
@@ -380,9 +390,10 @@ def main(conf, opts):
             execute_plugin(hook, name, plugin_mod, [conf] + args,
                            kwargs)
         except Exception:
-            logging.error('Init numpy plugin %s failed:\n%s' % (name,
+            logging.error('Init NumPy plugin %s failed:\n%s' % (name,
                           traceback.format_exc()))
-            sys.exit(1)
+            conf['app_state']['exit_code'] = 1
+            return conf['app_state']['exit_code']
     timelog.log(conf, 'verbose', 'npy_plugin_init')
 
     logging.info('Starting %(detector_shape)s FDK reconstruction'
@@ -400,15 +411,15 @@ def main(conf, opts):
 
     total_npy_memory_usage = get_npy_total_size(conf)
 
-    # Clean up after numpy plugins
+    # Clean up after NumPy plugins
 
     timelog.set(conf, 'verbose', 'npy_plugin_exit')
     hook = 'npy_plugin_exit'
-    logging.info('Cleaning up after %s numpy plugin(s)'
+    logging.info('Cleaning up after %s NumPy plugin(s)'
                  % ', '.join([plug[0] for plug in npy_plugins[hook]]))
     req_npy_plugins = npy_plugins.get(hook, [])
     for (name, plugin_mod, args, kwargs) in req_npy_plugins:
-        logging.debug('Clean up %s numpy plugin' % name)
+        logging.debug('Clean up %s NumPy plugin' % name)
         try:
 
             # Always pass conf as first arg
@@ -416,12 +427,13 @@ def main(conf, opts):
             execute_plugin(hook, name, plugin_mod, [conf] + args,
                            kwargs)
         except Exception:
-            logging.error('Exit numpy plugin %s failed:\n%s' % (name,
+            logging.error('Exit NumPy plugin %s failed:\n%s' % (name,
                           traceback.format_exc()))
-            sys.exit(1)
+            conf['app_state']['exit_code'] = 1
+            return conf['app_state']['exit_code']
     timelog.log(conf, 'verbose', 'npy_plugin_exit')
 
-    # Clean up numpy memory
+    # Clean up NumPy memory
 
     timelog.set(conf, 'verbose', 'npy_memory_clean')
     npy_free_all(conf)
@@ -445,7 +457,7 @@ def main(conf, opts):
         logging.info('Init times:')
         logging.info('  conf:                  %.4fs'
                      % timelog.get(conf, 'verbose', 'conf_init'))
-        logging.info('  numpy plugins:         %.4fs'
+        logging.info('  NumPy plugins:         %.4fs'
                      % timelog.get(conf, 'verbose', 'npy_plugin_init'))
 
     logging.info('IO times:')
@@ -473,21 +485,22 @@ def main(conf, opts):
                      % timelog.get(conf, 'verbose', 'backproject'))
 
     logging.info('Plugin times:')
-    logging.info('  numpy preprocess:      %.4fs' % timelog.get(conf,
+    logging.info('  NumPy preprocess:      %.4fs' % timelog.get(conf,
                  'default', 'npy_preprocess'))
-    logging.info('  numpy postprocess:     %.4fs' % timelog.get(conf,
+    logging.info('  NumPy postprocess:     %.4fs' % timelog.get(conf,
                  'default', 'npy_postprocess'))
 
     if conf['timelog'] == 'verbose':
         logging.info('Cleanup times:')
-        logging.info('  numpy memory:          %.4fs'
+        logging.info('  NumPy memory:          %.4fs'
                      % timelog.get(conf, 'verbose', 'npy_memory_clean'))
-        logging.info('  numpy plugins:         %.4fs'
+        logging.info('  NumPy plugins:         %.4fs'
                      % timelog.get(conf, 'verbose', 'npy_plugin_exit'))
 
     logging.info('Complete time used %.3fs' % timelog.get(conf,
                  'default', 'complete'))
     logging.shutdown()
+    return conf['app_state']['exit_code']
 
 
 def usage():
@@ -504,5 +517,6 @@ if __name__ == '__main__':
         npy_cfg = parse_setup(sys.argv, app_names, npy_opts, npy_cfg)
     except ParseError, err:
         print 'ERROR: %s' % err
-        sys.exit(1)
-    main(npy_cfg, npy_opts)
+        sys.exit(2)
+    exit_code = main(npy_cfg, npy_opts)
+    sys.exit(exit_code)

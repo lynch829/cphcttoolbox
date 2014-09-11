@@ -4,7 +4,7 @@
 #
 # --- BEGIN_HEADER ---
 #
-# io - cuda specific input/ouput helpers
+# io - CUDA specific input/ouput helpers
 # Copyright (C) 2011-2012  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
@@ -37,7 +37,7 @@ from cphct.io import engine_alloc, get_engine_data, get_engine_size, \
 def fill_base_cu_conf(conf):
     """Remaining configuration after handling command line options.
     Casts all floating point results using float data type from conf.
-    This version is specifically for the cuda engine.
+    This version is specifically for the CUDA engine.
 
     Parameters
     ----------
@@ -47,7 +47,7 @@ def fill_base_cu_conf(conf):
     Returns
     -------
     output : dict
-        Returns configuration dictionary filled with cuda specific settings.
+        Returns configuration dictionary filled with CUDA specific settings.
     """
 
     fill_base_npycore_conf(conf)
@@ -57,7 +57,7 @@ def fill_base_cu_conf(conf):
     if not conf['engine']:
         conf['engine'] = 'cuda'
 
-    # Initiate dict for cuda allocations and structures
+    # Initiate dict for CUDA allocations and structures
 
     conf['cu_data'] = {}
     conf['compute'] = {}
@@ -78,7 +78,7 @@ def cu_alloc(
     ):
     """Stores a {'data': data, 'size': size} entry with given key in
     conf['cu_data'] .
-    Used to keep track of allocated cuda data and provide shared access.
+    Used to keep track of allocated CUDA data and provide shared access.
 
     Parameters
     ----------
@@ -108,7 +108,7 @@ def cu_alloc(
 
 
 def get_cu_data(conf, key):
-    """Extracts cuda data for variable *key*
+    """Extracts CUDA data for variable *key*
 
     Parameters
     ----------
@@ -128,7 +128,7 @@ def get_cu_data(conf, key):
 
 
 def get_cu_size(conf, key):
-    """Extracts cuda data size for variable *key*
+    """Extracts CUDA data size for variable *key*
 
     Parameters
     ----------
@@ -148,7 +148,7 @@ def get_cu_size(conf, key):
 
 
 def get_cu_total_size(conf):
-    """Extracts the total size of allocated cuda data
+    """Extracts the total size of allocated CUDA data
 
     Parameters
     ----------
@@ -165,7 +165,7 @@ def get_cu_total_size(conf):
 
 
 def cu_free(conf, key, ignore_missing=False):
-    """Free cuda data entry *key* from conf['cu_data'].
+    """Free CUDA data entry *key* from conf['cu_data'].
 
     Does not explicitly free the data, but free happens automatically during
     garbage collection when no more references to the GPUArray or low-level
@@ -178,7 +178,7 @@ def cu_free(conf, key, ignore_missing=False):
     key : str
         Variable to be freed
     ignore_missing : bool, optional
-        If *True* the cuda data for variable *key* is freed if present.
+        If *True* the CUDA data for variable *key* is freed if present.
         If *False* exceptions may be raised
         based on the value of *key* (see Raises),
 
@@ -198,7 +198,7 @@ def cu_free(conf, key, ignore_missing=False):
 
 
 def cu_free_all(conf, garbage_collect=True):
-    """Free all cuda data entries from conf['cu_data'].
+    """Free all CUDA data entries from conf['cu_data'].
 
     Unreachable allocations from both GPUArrays and low-level mem_alloc are
     automatically freed during garbage collect, so there's no need to

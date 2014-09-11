@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # base - numpy back end functions shared by plugin and tools
-# Copyright (C) 2012-2013  The Cph CT Toolbox Project lead by Brian Vinter
+# Copyright (C) 2012-2014  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -38,15 +38,27 @@ from cphct.io import create_path_dir
 from cphct.npycore import zeros, empty_like, iinfo, finfo, float128, \
     clip, arange, hstack, log, isinf, isnan, nonzero, cos, sin, pi
 
-supported_proj_filters = [
-    'hamming',
-    'ram-lak',
-    'shepp-logan',
-    'cosine',
-    'hann',
-    'skip',
-    ]
+supported_filters = {
+    "fdk": [
+        'hamming',
+        'ram-lak',
+        'shepp-logan',
+        'cosine',
+        'hann',
+        'skip',
+        ],
+    "katsevich": [
+        'dhilbert',
+        'skip',
+        ],
+    }
 
+
+def supported_proj_filters(algo):
+    """Lookup a list of supported projection filters for provided algorithm"""
+    if not algo in supported_filters:
+        raise ValueError("No such %s implementation" % algo)
+    return supported_filters[algo]
 
 def prepare_output(shape, conf):
     """Shared helper to create output matrix for manipulation
@@ -240,6 +252,44 @@ def dump_array(data, path_or_fd):
     return data
 
 
+def verify_array(data, path_or_fd, chunk_index):
+    """Verify all values in data using values from path_or_fd. May be useful e.g.
+    to verify that input or output to a reconstruction is as expected inside
+    chain of preprocess or postprocess plugins. 
+
+    Parameters
+    ----------
+    data : ndarray
+        Data matrix to verify.
+    path_or_fd : file or str
+        Open file object or path of file to use for validation
+    chunk_index: offset in path as multiples of data size
+
+    Returns
+    -------
+    output : bool
+        Returns boolean indicating verification success.
+    """
+
+    # TMP!!
+    import numpy as np, numpy.linalg as la
+
+    if isinstance(path_or_fd, basestring):
+        path = path_or_fd
+        verify_fd = open(path, 'rb')
+        verify_fd.seek(data.size * chunk_index)
+    else:
+        path = None
+        verify_fd = path_or_fd
+    logging.debug('verify with %s' % path_or_fd)
+    verify = np.fromfile(verify_fd, dtype=data.dtype, count=data.size)
+    verify.shape = data.shape
+    if path is not None:
+        verify_fd.close()
+
+    return (la.norm(data) == la.norm(verify))
+
+
 def flux_to_proj(
     data,
     zero_norm,
@@ -316,7 +366,7 @@ def flux_to_proj(
             air_y = air_ref_pixel[0]
             air_x = air_ref_pixel[1]
             air_diff = air_norm[air_y, air_x] - raw_proj[air_y, air_x]
-            log_air_norm = air_norm - air_diff - zero_norm
+            log_air_norm = log(air_norm - air_diff - zero_norm)
 
         raw_proj -= zero_norm
         log(raw_proj, raw_proj)
@@ -337,11 +387,13 @@ def flux_to_proj(
     return out
 
 
-def square_array(data, out=None):
+def square_array(conf, data, out=None):
     """Square all values in data.
 
     Parameters
     ----------
+    conf : dict                      
+        Configuration dictionary.
     data : ndarray
         Data matrix to square.
     out : ndarray, optional
@@ -495,7 +547,8 @@ def interpolate_proj_pixels(
     detector_shape,
     out=None,
     ):
-    """Interpolate pixels in *data* based on the pixels marked in *proj_mask*
+    """Interpolate pixels in *data* based on the pixels marked with non-zero
+    value in *proj_mask*
     Pixels marked for interpolation are set to the average value of it's 
     two neighbours in the row direction. Neighbour values within the mask not 
     taken into account.
@@ -505,9 +558,7 @@ def interpolate_proj_pixels(
     data : ndarray
         Data matrix with measured intensities.
     proj_mask : ndarray
-        Matrix with pixels marked for interpolation
-    proj_scale : ndarray
-        Matrix with scaling values for interpolated pixels
+        Matrix with pixels marked for interpolation if non-zero
     detector_shape : tuple
         Detector shape as tuple with number of rows and columns.
     out : ndarray, optional

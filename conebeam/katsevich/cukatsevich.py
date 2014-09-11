@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# cukatsevich - cuda katsevich reconstruction
-# Copyright (C) 2011-2013  The CT-Toolbox Project lead by Brian Vinter
+# cukatsevich - CUDA katsevich reconstruction
+# Copyright (C) 2011-2014  The CT-Toolbox Project lead by Brian Vinter
 #
 # This file is part of CT-Toolbox.
 #
@@ -27,21 +27,21 @@
 # -- END_HEADER ---
 #
 
-"""Spiral cone beam CT using the Katsevich algorithm in cuda"""
+"""Spiral cone beam CT using the Katsevich algorithm in CUDA"""
 
 import sys
 import traceback
 
-from cphct.cu.core import gpu_init_mod, gpu_init_ctx, \
-    gpu_kernel_auto_init, gpu_exit, log_gpu_specs, gpu_save_kernels, \
-    gpu_array_from_alloc, gpu_alloc_from_array
+from cphct.cu.core import gpu_init_mod, gpu_init_ctx, gpu_device_count, \
+    gpu_kernels_auto_init, gpu_exit, log_gpu_specs, gpu_save_kernels, \
+    gpu_alloc_from_array
 from cphct.cu.io import cu_free_all, get_cu_data, get_cu_total_size
 from cphct.io import create_path_dir
 from cphct.log import logging, allowed_log_levels, setup_log, \
     default_level, log_scan_geometry
 from cphct.misc import timelog
 
-# These are basic numpy functions exposed through npy to use same numpy
+# These are basic NumPy functions exposed through npy to use same NumPy
 
 from cphct.npycore import pi, cos, arctan, ceil, int32
 from cphct.npycore.io import save_auto
@@ -59,11 +59,7 @@ from cphct.cone.katsevich.cu.kernels import init_recon, filter_chunk, \
 app_names = ['katsevich', 'cukatsevich']
 
 
-def reconstruct_volume(
-    conf,
-    npy_plugins,
-    cu_plugins,
-    ):
+def reconstruct_volume(conf, npy_plugins, cu_plugins):
     """Reconstruct 3D volume from the recorded 2D projections
 
     Parameters
@@ -71,7 +67,7 @@ def reconstruct_volume(
     conf : dict
         A dictionary of configuration options.
     npy_plugins : dict
-        A dictionary of numpy plugins to use
+        A dictionary of NumPy plugins to use
     cu_plugins : dict
         A dictionary of CUDA plugins to use
 
@@ -87,10 +83,10 @@ def reconstruct_volume(
         create_path_dir(conf['save_filtered_projs_data_path'])
         open(conf['save_filtered_projs_data_path'], 'wb', 0).close()
 
-    # Get gpu module  and checksum kernel handle
+    # Get GPU module and checksum kernel handle
 
-    gpu_module = conf['gpu']['module']
-    checksum_array = conf['compute']['kernels']['checksum']
+    checksum_array = conf['app_state']['gpu']['prepared_kernels'
+            ]['checksum_array']
 
     # Check Tam-Danielsson window coverage and warn if not covered
 
@@ -139,11 +135,12 @@ def reconstruct_volume(
     if not chunk_limits:
         logging.error('no chunks enabled!')
         gpu_exit(conf)
-        sys.exit(1)
+        conf['app_state']['exit_code'] = 1
+        return conf
 
     # Filter runs on a single rotation of projs at a time, which is independent
     # of the reconstruction chunk size so we use filter_* buffers for the
-    # filtering and input_projs, input_chunk and output_chunk for
+    # filtering and input_projs, input_chunk and recon_chunk for
     # reconstruction.
 
     chunk_items = conf['chunk_projs'] * conf['detector_rows'] \
@@ -162,7 +159,7 @@ def reconstruct_volume(
     input_buffer = get_npy_data(conf, 'input_buffer')
     input_projs = get_npy_data(conf, 'input_projs')
     input_chunk = get_npy_data(conf, 'input_chunk')
-    output_chunk = get_npy_data(conf, 'output_chunk')
+    recon_chunk = get_npy_data(conf, 'recon_chunk')
     if conf['checksum']:
         check_dest = get_npy_data(conf, 'check_dest')
 
@@ -171,13 +168,15 @@ def reconstruct_volume(
     gpu_filter_in = get_cu_data(conf, 'filter_in')
     gpu_filter_diff = get_cu_data(conf, 'filter_diff')
     gpu_filter_rebin = get_cu_data(conf, 'filter_rebin')
-    gpu_hilbert_ideal = get_cu_data(conf, 'hilbert_ideal')
+    gpu_proj_filter_array = get_cu_data(conf, 'proj_filter_array')
     gpu_filter_conv = get_cu_data(conf, 'filter_conv')
     gpu_filter_out = get_cu_data(conf, 'filter_out')
     gpu_input_chunk = get_cu_data(conf, 'input_chunk')
     gpu_proj_row_mins = get_cu_data(conf, 'proj_row_mins')
     gpu_proj_row_maxs = get_cu_data(conf, 'proj_row_maxs')
-    gpu_output_chunk = get_cu_data(conf, 'output_chunk')
+    gpu_recon_chunk = get_cu_data(conf, 'recon_chunk')
+    if conf['checksum']:
+        gpu_check_dest = get_cu_data(conf, 'check_dest')
 
     logging.debug('using about %db of host memory'
                   % get_npy_total_size(conf))
@@ -290,7 +289,7 @@ def reconstruct_volume(
             projs_meta = []
 
             hook = 'npy_load_input'
-            logging.info('Loading with %s numpy plugin(s)'
+            logging.info('Loading with %s NumPy plugin(s)'
                          % ', '.join([plug[0] for plug in
                          npy_plugins[hook]]))
             req_npy_plugins = npy_plugins.get(hook, [])
@@ -309,7 +308,8 @@ def reconstruct_volume(
                     logging.error('Load plugin %s failed:\n%s' % (name,
                                   traceback.format_exc()))
                     gpu_exit(conf)
-                    sys.exit(1)
+                    conf['app_state']['exit_code'] = 1
+                    return conf
 
             if conf['checksum']:
                 chunk_view = projs_data.ravel()
@@ -318,15 +318,15 @@ def reconstruct_volume(
 
             filter_meta = projs_meta
 
-            # Preprocess current chunk of projections with numpy plugins
+            # Preprocess current chunk of projections with NumPy plugins
 
             hook = 'npy_preprocess_input'
-            logging.info('Preprocessing with %s numpy plugin(s)'
+            logging.info('Preprocessing with %s NumPy plugin(s)'
                          % ', '.join([plug[0] for plug in
                          npy_plugins[hook]]))
             req_npy_plugins = npy_plugins.get(hook, [])
             for (name, plugin_mod, args, kwargs) in req_npy_plugins:
-                logging.debug('Preprocessing chunk with %s numpy plugin'
+                logging.debug('Preprocessing chunk with %s NumPy plugin'
                                % name)
                 try:
                     timelog.set(conf, 'default', 'npy_preprocess')
@@ -339,10 +339,11 @@ def reconstruct_volume(
 
                     timelog.log(conf, 'default', 'npy_preprocess')
                 except Exception:
-                    logging.error('Preprocess numpy plugin %s failed:\n%s'
+                    logging.error('Preprocess NumPy plugin %s failed:\n%s'
                                    % (name, traceback.format_exc()))
                     gpu_exit(conf)
-                    sys.exit(1)
+                    conf['app_state']['exit_code'] = 1
+                    return conf
 
             if conf['checksum']:
                 chunk_view = filter_in.ravel()
@@ -351,81 +352,72 @@ def reconstruct_volume(
             # Skip filtering step if projections are already on filtered form
             # Accept empty projs_meta to allow dummy runs without input
 
-            if projs_meta and projs_meta[-1]['filtered']:
+            if conf['proj_filter'] == 'skip' or projs_meta \
+                and projs_meta[-1]['filtered']:
                 out_size = out_end - out_first
                 filter_out[:] = filter_in[:out_size]
             else:
                 (filter_diff[:], filter_rebin[:]) = (0, 0)
                 (filter_conv[:], filter_out[:]) = (0, 0)
                 timelog.set(conf, 'verbose', 'memset_gpu')
-                gpu_module.memset_d8(gpu_filter_in, 0, filter_in.nbytes)
-                gpu_module.memset_d8(gpu_filter_diff, 0,
-                        filter_diff.nbytes)
-                gpu_module.memset_d8(gpu_filter_rebin, 0,
-                        filter_rebin.nbytes)
-                gpu_module.memset_d8(gpu_filter_conv, 0,
-                        filter_conv.nbytes)
-                gpu_module.memset_d8(gpu_filter_out, 0,
-                        filter_out.nbytes)
+                gpu_filter_diff.fill(0)
+                gpu_filter_rebin.fill(0)
+                gpu_filter_conv.fill(0)
+                gpu_filter_out.fill(0)
                 timelog.log(conf, 'verbose', 'memset_gpu', barrier=True)
                 logging.debug('copy %d (%db) projs from host to dev'
                               % (in_end - in_first, filter_in.nbytes))
                 timelog.set(conf, 'verbose', 'host_to_gpu')
-                gpu_module.memcpy_htod(gpu_filter_in, filter_in)
+                gpu_filter_in.set(filter_in)
                 timelog.log(conf, 'verbose', 'host_to_gpu',
                             barrier=True)
 
-                # Preprocess current chunk of projections with cuda plugins
-
-                # Expose input as gpuarray to plugins
-
-                wrap_filter_in = gpu_array_from_alloc(gpu_filter_in,
-                        filter_in.shape, filter_in.dtype)
+                # Preprocess current chunk of projections with CUDA plugins
 
                 hook = 'cu_preprocess_input'
-                logging.info('Preprocessing with %s cuda plugin(s)'
+                logging.info('Preprocessing with %s CUDA plugin(s)'
                              % ', '.join([plug[0] for plug in
                              cu_plugins[hook]]))
                 req_cu_plugins = cu_plugins.get(hook, [])
                 for (name, plugin_mod, args, kwargs) in req_cu_plugins:
-                    logging.debug('Preprocessing chunk with %s cuda plugin'
+                    logging.debug('Preprocessing chunk with %s CUDA plugin'
                                    % name)
                     try:
                         timelog.set(conf, 'default', 'cu_preprocess',
                                     barrier=True)
 
-                        # Always pass wrap_filter_in and conf as first args
+                        # Always pass filter_in and conf as first args
 
                         execute_plugin(hook, name, plugin_mod,
-                                [wrap_filter_in, filter_meta, conf]
+                                [gpu_filter_in, filter_meta, conf]
                                 + args, kwargs)
 
                         timelog.log(conf, 'default', 'cu_preprocess',
                                     barrier=True)
                     except Exception:
-                        logging.error('Preprocess cuda plugin %s failed:\n%s'
+                        logging.error('Preprocess CUDA plugin %s failed:\n%s'
                                  % (name, traceback.format_exc()))
                         gpu_exit(conf)
-                        sys.exit(1)
+                        conf['app_state']['exit_code'] = 1
+                        return conf
 
-                # Extract raw alloc again after plugins
+                timelog.set(conf, 'verbose', 'core_filter',
+                            barrier=True)
 
-                gpu_filter_in = gpu_alloc_from_array(wrap_filter_in)
-                del wrap_filter_in
-
-                timelog.log(conf, 'verbose', 'core_filter',
-                            start_time=0.0, end_time=filter_chunk(
-                    chunk,
+                filter_chunk(
                     in_first,
                     in_last,
                     gpu_filter_in,
                     gpu_filter_diff,
                     gpu_filter_rebin,
-                    gpu_hilbert_ideal,
+                    gpu_proj_filter_array,
                     gpu_filter_conv,
                     gpu_filter_out,
                     conf,
-                    ))
+                    )
+                timelog.log(conf, 'verbose', 'core_filter',
+                            barrier=True)
+
                 logging.debug('copy %d (%db) filtered projs from dev to host'
                                % (len(filter_out), filter_out.nbytes))
 
@@ -438,15 +430,13 @@ def reconstruct_volume(
                 # gpu_module.memcpy_dtod(gpu_input_chunk_offset, gpu_filter_out)
 
                 timelog.set(conf, 'verbose', 'gpu_to_host')
-                gpu_module.memcpy_dtoh(filter_out, gpu_filter_out)
+                gpu_filter_out.get(ary=filter_out)
                 timelog.log(conf, 'verbose', 'gpu_to_host',
                             barrier=True)
 
                 if conf['checksum']:
                     timelog.set(conf, 'verbose', 'gpu_to_host')
-                    (filter_diff[:], filter_rebin[:]) = (0, 0)
-                    filter_conv[:] = 0
-                    gpu_module.memcpy_dtoh(filter_diff, gpu_filter_diff)
+                    gpu_filter_diff.get(ary=filter_diff)
                     timelog.log(conf, 'verbose', 'gpu_to_host',
                                 barrier=True)
 
@@ -454,8 +444,7 @@ def reconstruct_volume(
                                  filter_diff.size)
 
                     timelog.set(conf, 'verbose', 'gpu_to_host')
-                    gpu_module.memcpy_dtoh(filter_rebin,
-                            gpu_filter_rebin)
+                    gpu_filter_rebin.get(ary=filter_rebin)
                     timelog.log(conf, 'verbose', 'gpu_to_host',
                                 barrier=True)
 
@@ -463,7 +452,7 @@ def reconstruct_volume(
                                  filter_rebin.size)
 
                     timelog.set(conf, 'verbose', 'gpu_to_host')
-                    gpu_module.memcpy_dtoh(filter_conv, gpu_filter_conv)
+                    gpu_filter_conv.get(ary=filter_conv)
                     timelog.log(conf, 'verbose', 'gpu_to_host',
                                 barrier=True)
 
@@ -514,12 +503,11 @@ def reconstruct_volume(
             log_checksum('filtered projs', input_projs,
                          input_projs.size)
 
-        timelog.set(conf, 'verbose', 'backproject')
+        timelog.set(conf, 'verbose', 'backproject', barrier=True)
 
-        output_chunk[:] = 0
         recon_meta = []
-        timelog.set(conf, 'verbose', 'memset_gpu')
-        gpu_module.memset_d8(gpu_output_chunk, 0, output_chunk.nbytes)
+        timelog.set(conf, 'verbose', 'memset_gpu', barrier=True)
+        gpu_recon_chunk.fill(0)
         timelog.log(conf, 'verbose', 'memset_gpu', barrier=True)
         log_time = 0.0
 
@@ -538,46 +526,60 @@ def reconstruct_volume(
             rel_first = in_first - first_proj
             rel_end = in_end - first_proj
 
-            logging.debug('backproject projections %d to %d (%d - %d)' % \
-                          (in_first, in_last, first_proj, last_proj))
+            logging.debug('backproject projections %d to %d (%d - %d)'
+                          % (in_first, in_last, first_proj, last_proj))
 
             input_chunk[:] = input_projs[rel_first:rel_end]
 
             logging.debug('copy %d (%db) projs from no. %d forward to device'
-                          % (len(input_chunk), input_chunk.nbytes,
-                             in_first))
+                           % (len(input_chunk), input_chunk.nbytes,
+                          in_first))
             logging.debug('copy %s to %s' % (input_chunk.size,
-                                                  gpu_input_chunk))
+                          gpu_input_chunk))
 
             # TODO: only copy back to gpu if not in gpu_projs_only mode
 
             timelog.set(conf, 'verbose', 'host_to_gpu')
-            gpu_module.memcpy_htod(gpu_input_chunk, input_chunk)
+            gpu_input_chunk.set(input_chunk)
             timelog.log(conf, 'verbose', 'host_to_gpu', barrier=True)
+
             if conf['checksum']:
-                check_dest[:] = 0.0
+                gpu_check_dest.fill(0)
+
                 checksum_array(
-                    gpu_module.Out(check_dest),
-                    gpu_input_chunk,
+                    gpu_alloc_from_array(gpu_check_dest),
+                    gpu_alloc_from_array(gpu_input_chunk),
                     int32(in_first),
                     int32(in_last),
                     block=(1, 1, 1),
                     grid=(1, 1),
                     )
+                gpu_check_dest.get(ary=check_dest)
+
                 logging.debug('test checksum_array %d - %d projs is %f'
                               % (in_first, in_last, check_dest[0]))
 
             logging.debug('run reconstruction of chunk %d:%d with projs %d:%d'
-                              % (first_z, last_z, in_first, in_last))
+                           % (first_z, last_z, in_first, in_last))
 
-            timelog.set(conf, 'verbose', 'core_backproject', barrier=True)
+            timelog.set(conf, 'verbose', 'core_backproject',
+                        barrier=True)
 
-            backproject_chunk(chunk, in_first, in_last, first_z, last_z,
-                              gpu_input_chunk, gpu_proj_row_mins,
-                              gpu_proj_row_maxs, gpu_output_chunk, conf)
+            backproject_chunk(
+                chunk,
+                in_first,
+                in_last,
+                first_z,
+                last_z,
+                gpu_input_chunk,
+                gpu_proj_row_mins,
+                gpu_proj_row_maxs,
+                gpu_recon_chunk,
+                conf,
+                )
 
-            log_time += timelog.log(conf, 'verbose', 'core_backproject',
-                                   barrier=True)
+            log_time += timelog.log(conf, 'verbose', 'core_backproject'
+                                    , barrier=True)
 
         msg = 'Reconstructed chunk: %s:%s' % (first_z, last_z)
 
@@ -588,88 +590,65 @@ def reconstruct_volume(
 
         conf['app_state']['chunk']['layout'] = ('x', 'y', 'z')
 
-        # Postprocess current chunk of results with cuda plugins
-
-        # Expose output as gpuarray to plugins
-
-        wrap_output_chunk = gpu_array_from_alloc(gpu_output_chunk,
-                output_chunk.shape, output_chunk.dtype)
+        # Postprocess current chunk of results with CUDA plugins
 
         hook = 'cu_postprocess_output'
-        logging.info('Postprocessing with %s cuda plugin(s)'
+        logging.info('Postprocessing with %s CUDA plugin(s)'
                      % ', '.join([plug[0] for plug in
                      cu_plugins[hook]]))
         req_cu_plugins = cu_plugins.get(hook, [])
         for (name, plugin_mod, args, kwargs) in req_cu_plugins:
-            logging.debug('Postprocessing chunk with %s cuda plugin'
+            logging.debug('Postprocessing chunk with %s CUDA plugin'
                           % name)
             try:
                 timelog.set(conf, 'default', 'cu_postprocess',
                             barrier=True)
 
-                # Always pass gpu_output_chunk and conf as first args
+                # Always pass gpu_recon_chunk and conf as first args
 
                 execute_plugin(hook, name, plugin_mod,
-                               [wrap_output_chunk, recon_meta, conf]
+                               [gpu_recon_chunk, recon_meta, conf]
                                + args, kwargs)
 
                 timelog.log(conf, 'default', 'cu_postprocess',
                             barrier=True)
             except Exception:
-                logging.error('Postprocess cuda plugin %s failed:\n%s'
+                logging.error('Postprocess CUDA plugin %s failed:\n%s'
                               % (name, traceback.format_exc()))
                 gpu_exit(conf)
-                sys.exit(1)
-
-        # Extract raw alloc again after plugins
-
-        gpu_output_chunk = gpu_alloc_from_array(wrap_output_chunk)
-        del wrap_output_chunk
+                conf['app_state']['exit_code'] = 1
+                return conf
 
         timelog.set(conf, 'verbose', 'gpu_to_host')
-        gpu_module.memcpy_dtoh(output_chunk, gpu_output_chunk)
+        gpu_recon_chunk.get(ary=recon_chunk)
         timelog.log(conf, 'verbose', 'gpu_to_host', barrier=True)
         if conf['checksum']:
-            check_dest[:] = 0.0
             checksum_array(
-                gpu_module.Out(check_dest),
-                gpu_output_chunk,
+                gpu_alloc_from_array(gpu_check_dest),
+                gpu_alloc_from_array(gpu_recon_chunk),
                 int32(check_first),
                 int32(check_last),
                 block=(1, 1, 1),
                 grid=(1, 1),
                 )
+            gpu_check_dest.get(ary=check_dest)
             logging.debug('test checksum_array %d - %d result is %f'
                           % (check_first, check_last, check_dest[0]))
-            log_checksum('result', output_chunk, output_chunk.size)
+            log_checksum('result', recon_chunk, recon_chunk.size)
 
-        # TODO: scale on gpuarray before cuda plugins for consistency?
-
-        # Scale out values to compensate for summed contribution from multiple
-        # projections (this is a delayed part of the back projection formula)
-
-        output_chunk /= conf['projs_per_turn']
-
-        # We reconstruct in x, y, z but the raw output format is z, y, x
-
-        output_zyx = output_chunk.swapaxes(0, 2)
-
-        # View for plugins
-
-        recon_chunk = output_zyx[:]
         conf['app_state']['chunk']['layout'] = ('z', 'y', 'x')
 
         timelog.log(conf, 'verbose', 'backproject', barrier=True)
 
-        # Postprocess current chunk of results with numpy plugins
+        # Postprocess current chunk of results with NumPy plugins
 
         hook = 'npy_postprocess_output'
-        logging.info('Postprocessing with %s numpy plugin(s)'
+        logging.info('Postprocessing with %s NumPy plugin(s)'
                      % ', '.join([plug[0] for plug in
                      npy_plugins[hook]]))
         req_npy_plugins = npy_plugins.get(hook, [])
         for (name, plugin_mod, args, kwargs) in req_npy_plugins:
-            logging.debug('Postprocessing chunk with %s numpy plugin'
+            logging.debug('Postprocessing chunk with %s NumPy plugin'
                           % name)
             try:
                 timelog.set(conf, 'default', 'npy_postprocess')
@@ -681,18 +660,19 @@ def reconstruct_volume(
 
                 timelog.log(conf, 'default', 'npy_postprocess')
             except Exception:
-                logging.error('Postprocess numpy plugin %s failed:\n%s'
+                logging.error('Postprocess NumPy plugin %s failed:\n%s'
                               % (name, traceback.format_exc()))
                 gpu_exit(conf)
-                sys.exit(1)
+                conf['app_state']['exit_code'] = 1
+                return conf
 
         if conf['checksum']:
-            chunk_view = output_zyx.ravel()
+            chunk_view = recon_chunk.ravel()
             log_checksum('postprocessed part', chunk_view,
                          chunk_view.size)
 
         hook = 'npy_save_output'
-        logging.info('Saving with %s numpy plugin(s)'
+        logging.info('Saving with %s NumPy plugin(s)'
                      % ', '.join([plug[0] for plug in
                      npy_plugins[hook]]))
         req_npy_plugins = npy_plugins.get(hook, [])
@@ -711,7 +691,8 @@ def reconstruct_volume(
                 logging.error('Save plugin %s failed:\n%s' % (name,
                               traceback.format_exc()))
                 gpu_exit(conf)
-                sys.exit(1)
+                conf['app_state']['exit_code'] = 1
+                return conf
 
     # Close file descriptors used for chunked writing
 
@@ -730,6 +711,11 @@ def main(conf, opts):
         A dictionary of configuration options.
     opts : dict
         A dictionary of application options.
+
+    Returns
+    -------
+    output : int
+        An integer exit code for the run, 0 means success
     """
 
     if conf['log_level']:
@@ -748,6 +734,11 @@ def main(conf, opts):
         'cu_preprocess',
         'cu_postprocess',
         ]
+
+    if conf['log_level'] == logging.DEBUG:
+        default.extend(['diff_chunk', 'fwd_rebin_chunk',
+                       'convolve_chunk', 'rev_rebin_chunk',
+                       'backproject_chunk'])
 
     verbose = [
         'conf_init',
@@ -785,26 +776,38 @@ def main(conf, opts):
         logging.warning('Katsevich detector_row_offset is experimental!'
                         )
 
+    # Check that z-range fits recording without overscan half-rotations
+
+    z_range = conf['z_max'] - conf['z_min']
+    recon_progress = conf['progress_per_turn'] * conf['core_turns']
+    if abs(recon_progress - z_range) > 0.01 * conf['progress_per_turn']:
+        msg = 'Katsevich z-range must fit total_turns'
+        msg = '%s and progress_per_turn!' % msg
+        logging.warning('%s (%f vs %f)' % (msg, z_range,
+                        recon_progress))
+
     # Init GPU access
 
-    logging.info('Init GPU %d' % conf['cuda_device_index'])
+    logging.info('Init GPU %d' % conf['gpu_device_index'])
     timelog.set(conf, 'verbose', 'gpu_init')
     gpu_init_mod(conf)
     gpu_module = conf['gpu']['module']
-    gpu_count = gpu_module.Device.count()
+    gpu_count = gpu_device_count(conf)
     if gpu_count < 1:
         logging.error('No GPUs available!')
-        sys.exit(1)
-    if conf['cuda_device_index'] > gpu_count - 1:
-        logging.error('cuda device index (%d) must match GPU IDs! (%s)'
-                      % (conf['cuda_device_index'], ', '.join(['%s' % i
+        conf['app_state']['exit_code'] = 1
+        return conf['app_state']['exit_code']
+    if conf['gpu_device_index'] > gpu_count - 1:
+        logging.error('GPU device index (%d) must match GPU IDs! (%s)'
+                      % (conf['gpu_device_index'], ', '.join(['%s' % i
                       for i in range(gpu_count)])))
-        sys.exit(1)
-    if conf['cuda_device_index'] < 0:
+        conf['app_state']['exit_code'] = 1
+        return conf['app_state']['exit_code']
+    if conf['gpu_device_index'] < 0:
 
         # Just default to the first one for now - 'best' would be better
 
-        conf['cuda_device_index'] = 0
+        conf['gpu_device_index'] = 0
     gpu_init_ctx(conf)
     timelog.log(conf, 'verbose', 'gpu_init')
 
@@ -817,41 +820,43 @@ def main(conf, opts):
                  ** 2, gpu_total))
 
     timelog.set(conf, 'verbose', 'gpu_kernel')
-    gpu_kernel_auto_init(conf, rt_const)
+    gpu_kernels_auto_init(conf, rt_const)
     gpu_save_kernels(conf)
     timelog.log(conf, 'verbose', 'gpu_kernel')
 
     if not conf['cu_kernels']:
         logging.error('no valid gpu compute kernels found!')
         gpu_exit(conf)
-        sys.exit(1)
+        conf['app_state']['exit_code'] = 1
+        return conf['app_state']['exit_code']
 
-    logging.debug("filter out projs %d" % conf['filter_out_projs'])
-    logging.debug("backproj in projs %d" % conf['backproject_in_projs'])
+    logging.debug('filter out projs %d' % conf['filter_out_projs'])
+    logging.debug('backproj in projs %d' % conf['backproject_in_projs'])
 
     # Initialize Katsevich kernel data structures
 
     init_recon(conf, fdt)
 
-    # Load numpy plugins
+    # Load NumPy plugins
 
     timelog.set(conf, 'verbose', 'npy_plugin_init')
     (npy_plugins, errors) = load_plugins(app_names, 'npy', conf)
     for (key, val) in errors.items():
         for (plugin_name, load_err) in val:
-            logging.error('loading %s %s numpy plugin failed : %s'
+            logging.error('loading %s %s NumPy plugin failed : %s'
                           % (key, plugin_name, load_err))
             gpu_exit(conf)
-            sys.exit(1)
+            conf['app_state']['exit_code'] = 1
+            return conf['app_state']['exit_code']
 
-    # Prepare configured numpy plugins
+    # Prepare configured NumPy plugins
 
     hook = 'npy_plugin_init'
-    logging.info('Initializing %s numpy plugin(s)' % ', '.join([plug[0]
+    logging.info('Initializing %s NumPy plugin(s)' % ', '.join([plug[0]
                  for plug in npy_plugins[hook]]))
     req_npy_plugins = npy_plugins.get(hook, [])
     for (name, plugin_mod, args, kwargs) in req_npy_plugins:
-        logging.debug('Initialize %s numpy plugin' % name)
+        logging.debug('Initialize %s NumPy plugin' % name)
         try:
 
             # Always pass conf as first arg
@@ -859,31 +864,33 @@ def main(conf, opts):
             execute_plugin(hook, name, plugin_mod, [conf] + args,
                            kwargs)
         except Exception:
-            logging.error('Init numpy plugin %s failed:\n%s' % (name,
+            logging.error('Init NumPy plugin %s failed:\n%s' % (name,
                           traceback.format_exc()))
             gpu_exit(conf)
-            sys.exit(1)
+            conf['app_state']['exit_code'] = 1
+            return conf['app_state']['exit_code']
     timelog.log(conf, 'verbose', 'npy_plugin_init')
 
-    # Load cuda plugins
+    # Load CUDA plugins
 
     timelog.set(conf, 'verbose', 'cu_plugin_init')
     (cu_plugins, errors) = load_plugins(app_names, 'cu', conf)
     for (key, val) in errors.items():
         for (plugin_name, load_err) in val:
-            logging.error('loading %s %s cuda plugin failed : %s'
+            logging.error('loading %s %s CUDA plugin failed : %s'
                           % (key, plugin_name, load_err))
             gpu_exit(conf)
-            sys.exit(1)
+            conf['app_state']['exit_code'] = 1
+            return conf['app_state']['exit_code']
 
-    # Prepare configured cuda plugins
+    # Prepare configured CUDA plugins
 
     hook = 'cu_plugin_init'
-    logging.info('Initializing %s cuda plugin(s)' % ', '.join([plug[0]
+    logging.info('Initializing %s CUDA plugin(s)' % ', '.join([plug[0]
                  for plug in cu_plugins[hook]]))
     req_cu_plugins = cu_plugins.get(hook, [])
     for (name, plugin_mod, args, kwargs) in req_cu_plugins:
-        logging.debug('Initialize %s cuda plugin' % name)
+        logging.debug('Initialize %s CUDA plugin' % name)
         try:
 
             # Always pass conf as first arg
@@ -891,10 +898,11 @@ def main(conf, opts):
             execute_plugin(hook, name, plugin_mod, [conf] + args,
                            kwargs)
         except Exception:
-            logging.error('Init cuda plugin %s failed:\n%s' % (name,
+            logging.error('Init CUDA plugin %s failed:\n%s' % (name,
                           traceback.format_exc()))
             gpu_exit(conf)
-            sys.exit(1)
+            conf['app_state']['exit_code'] = 1
+            return conf['app_state']['exit_code']
     timelog.log(conf, 'verbose', 'cu_plugin_init')
 
     logging.info('Starting %(detector_shape)s Katsevich reconstruction'
@@ -913,15 +921,15 @@ def main(conf, opts):
     total_npy_memory_usage = get_npy_total_size(conf)
     total_cu_memory_usage = get_cu_total_size(conf)
 
-    # Clean up after cuda plugins
+    # Clean up after CUDA plugins
 
     timelog.set(conf, 'verbose', 'cu_plugin_exit')
     hook = 'cu_plugin_exit'
-    logging.info('Cleaning up after %s cuda plugin(s)'
+    logging.info('Cleaning up after %s CUDA plugin(s)'
                  % ', '.join([plug[0] for plug in cu_plugins[hook]]))
     req_cu_plugins = cu_plugins.get(hook, [])
     for (name, plugin_mod, args, kwargs) in req_cu_plugins:
-        logging.debug('Clean up %s cuda plugin' % name)
+        logging.debug('Clean up %s CUDA plugin' % name)
         try:
 
             # Always pass conf as first arg
@@ -929,21 +937,22 @@ def main(conf, opts):
             execute_plugin(hook, name, plugin_mod, [conf] + args,
                            kwargs)
         except Exception:
-            logging.error('Exit cuda plugin %s failed:\n%s' % (name,
+            logging.error('Exit CUDA plugin %s failed:\n%s' % (name,
                           traceback.format_exc()))
             gpu_exit(conf)
-            sys.exit(1)
+            conf['app_state']['exit_code'] = 1
+            return conf['app_state']['exit_code']
     timelog.log(conf, 'verbose', 'cu_plugin_exit')
 
-    # Clean up after numpy plugins
+    # Clean up after NumPy plugins
 
     timelog.set(conf, 'verbose', 'npy_plugin_exit')
     hook = 'npy_plugin_exit'
-    logging.info('Cleaning up after %s numpy plugin(s)'
+    logging.info('Cleaning up after %s NumPy plugin(s)'
                  % ', '.join([plug[0] for plug in npy_plugins[hook]]))
     req_npy_plugins = npy_plugins.get(hook, [])
     for (name, plugin_mod, args, kwargs) in req_npy_plugins:
-        logging.debug('Clean up %s numpy plugin' % name)
+        logging.debug('Clean up %s NumPy plugin' % name)
         try:
 
             # Always pass conf as first arg
@@ -951,18 +960,19 @@ def main(conf, opts):
             execute_plugin(hook, name, plugin_mod, [conf] + args,
                            kwargs)
         except Exception:
-            logging.error('Exit numpy plugin %s failed:\n%s' % (name,
+            logging.error('Exit NumPy plugin %s failed:\n%s' % (name,
                           traceback.format_exc()))
             gpu_exit(conf)
-            sys.exit(1)
+            conf['app_state']['exit_code'] = 1
+            return conf['app_state']['exit_code']
     timelog.log(conf, 'verbose', 'npy_plugin_exit')
 
-    # Clean up cuda memory
+    # Clean up CUDA memory
     # GC automatically frees all unreachable GPUArray and mem_alloc memory
 
     timelog.set(conf, 'verbose', 'cu_memory_clean')
-    for gpu_var in ('cu_kernels', 'compute'):
-        del conf[gpu_var]
+    del conf['app_state']['gpu']['prepared_kernels']
+    del conf['cu_kernels']
     cu_free_all(conf)
     timelog.log(conf, 'verbose', 'cu_memory_clean')
 
@@ -980,7 +990,7 @@ def main(conf, opts):
                  % (gpu_free / 1024 ** 2, gpu_free, gpu_total / 1024
                  ** 2, gpu_total))
 
-    # Clean up numpy memory
+    # Clean up NumPy memory
 
     timelog.set(conf, 'verbose', 'npy_memory_clean')
     npy_free_all(conf)
@@ -999,20 +1009,20 @@ def main(conf, opts):
     logging.info('Memory usage:')
     logging.info('  main: %dMB (%dB)' % (total_npy_memory_usage / 1024
                  ** 2, total_npy_memory_usage))
-    logging.info('  gpu:  %dMB (%dB)' % (total_cu_memory_usage / 1024
+    logging.info('  GPU:  %dMB (%dB)' % (total_cu_memory_usage / 1024
                  ** 2, total_cu_memory_usage))
 
     if conf['timelog'] == 'verbose':
         logging.info('Init times:')
         logging.info('  conf:                  %.4fs'
                      % timelog.get(conf, 'verbose', 'conf_init'))
-        logging.info('  gpu device:            %.4fs'
+        logging.info('  GPU device:            %.4fs'
                      % timelog.get(conf, 'verbose', 'gpu_init'))
-        logging.info('  gpu kernels:           %.4fs'
+        logging.info('  GPU kernels:           %.4fs'
                      % timelog.get(conf, 'verbose', 'gpu_kernel'))
-        logging.info('  numpy plugins:         %.4fs'
+        logging.info('  NumPy plugins:         %.4fs'
                      % timelog.get(conf, 'verbose', 'npy_plugin_init'))
-        logging.info('  cuda plugins:          %.4fs'
+        logging.info('  CUDA plugins:          %.4fs'
                      % timelog.get(conf, 'verbose', 'cu_plugin_init'))
 
     logging.info('IO times:')
@@ -1024,11 +1034,11 @@ def main(conf, opts):
     if conf['timelog'] == 'verbose':
         logging.info('  save projections:      %.4fs'
                      % timelog.get(conf, 'verbose', 'proj_save'))
-        logging.info('  transfers to gpu:      %.4fs'
+        logging.info('  transfers to GPU:      %.4fs'
                      % timelog.get(conf, 'verbose', 'host_to_gpu'))
-        logging.info('  transfers from gpu:    %.4fs'
+        logging.info('  transfers from GPU:    %.4fs'
                      % timelog.get(conf, 'verbose', 'gpu_to_host'))
-        logging.info('  reset gpu data:        %.4fs'
+        logging.info('  reset GPU data:        %.4fs'
                      % timelog.get(conf, 'verbose', 'memset_gpu'))
         logging.info('GPU kernel times:')
         logging.info('  filtering:             %.4fs'
@@ -1042,31 +1052,32 @@ def main(conf, opts):
                      % timelog.get(conf, 'verbose', 'core_backproject'))
 
     logging.info('Plugin times:')
-    logging.info('  numpy preprocess:      %.4fs' % timelog.get(conf,
+    logging.info('  NumPy preprocess:      %.4fs' % timelog.get(conf,
                  'default', 'npy_preprocess'))
-    logging.info('  numpy postprocess:     %.4fs' % timelog.get(conf,
+    logging.info('  NumPy postprocess:     %.4fs' % timelog.get(conf,
                  'default', 'npy_postprocess'))
-    logging.info('  cuda preprocess:       %.4fs' % timelog.get(conf,
+    logging.info('  CUDA preprocess:       %.4fs' % timelog.get(conf,
                  'default', 'cu_preprocess'))
-    logging.info('  cuda postprocess:      %.4fs' % timelog.get(conf,
+    logging.info('  CUDA postprocess:      %.4fs' % timelog.get(conf,
                  'default', 'cu_postprocess'))
 
     if conf['timelog'] == 'verbose':
         logging.info('Cleanup times:')
-        logging.info('  numpy memory:          %.4fs'
+        logging.info('  NumPy memory:          %.4fs'
                      % timelog.get(conf, 'verbose', 'npy_memory_clean'))
-        logging.info('  cuda memory:           %.4fs'
+        logging.info('  CUDA memory:           %.4fs'
                      % timelog.get(conf, 'verbose', 'cu_memory_clean'))
-        logging.info('  numpy plugins:         %.4fs'
+        logging.info('  NumPy plugins:         %.4fs'
                      % timelog.get(conf, 'verbose', 'npy_plugin_exit'))
-        logging.info('  cuda plugins:          %.4fs'
+        logging.info('  CUDA plugins:          %.4fs'
                      % timelog.get(conf, 'verbose', 'cu_plugin_exit'))
-        logging.info('  gpu device:            %.4fs'
+        logging.info('  GPU device:            %.4fs'
                      % timelog.get(conf, 'verbose', 'gpu_exit'))
 
     logging.info('Complete time used %.3fs' % timelog.get(conf,
                  'default', 'complete'))
     logging.shutdown()
+    return conf['app_state']['exit_code']
 
 
 def usage():
@@ -1083,5 +1094,6 @@ if __name__ == '__main__':
         cu_cfg = parse_setup(sys.argv, app_names, cu_opts, cu_cfg)
     except ParseError, err:
         print 'ERROR: %s' % err
-        sys.exit(1)
-    main(cu_cfg, cu_opts)
+        sys.exit(2)
+    exit_code = main(cu_cfg, cu_opts)
+    sys.exit(exit_code)

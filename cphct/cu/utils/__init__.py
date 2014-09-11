@@ -4,7 +4,7 @@
 #
 # --- BEGIN_HEADER ---
 #
-# __init__ - cuda back end functions shared by plugin and tools
+# __init__ - CUDA back end functions shared by plugin and tools
 # Copyright (C) 2012  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
@@ -27,7 +27,7 @@
 # -- END_HEADER ---
 #
 
-"""Cph CT Toolbox cuda back end functions shared by plugins and tools.
+"""Cph CT Toolbox CUDA back end functions shared by plugins and tools.
 We separate I/O from the actual handlers so that they can be used inside apps
 and in separate tools scripts."""
 

@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# katsevich - katsevich reconstruction wrapper
-# Copyright (C) 2011  The Cph CT Toolbox Project lead by Brian Vinter
+# katsevich - Katsevich reconstruction wrapper
+# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -60,7 +60,7 @@ if __name__ == '__main__':
         base_cfg = parse_setup(sys.argv, app_names, base_opts, base_cfg)
     except ParseError, err:
         print 'ERROR: %s' % err
-        sys.exit(1)
+        sys.exit(2)
     engine = base_cfg['engine']
     if engine == 'numpy':
         from npykatsevich import main
@@ -74,10 +74,11 @@ if __name__ == '__main__':
         app_names.append('cu%s' % app_names[0])
     else:
         print 'Unknown engine: %s' % engine
-        sys.exit(1)
+        sys.exit(2)
     try:
         cfg = parse_setup(sys.argv, app_names, opts, cfg)
     except ParseError, err:
         print 'ERROR: %s' % err
-        sys.exit(1)
-    main(cfg, opts)
+        sys.exit(2)
+    exit_code = main(cfg, opts)
+    sys.exit(exit_code)

@@ -4,7 +4,7 @@
 #
 # --- BEGIN_HEADER ---
 #
-# base - cuda specific katsevich reconstruction kernels
+# base - CUDA specific katsevich reconstruction kernels
 # Copyright (C) 2011-2013  The CT-Toolbox Project lead by Brian Vinter
 #
 # This file is part of CT-Toolbox.
@@ -27,23 +27,22 @@
 # -- END_HEADER ---
 #
 
-"""Spiral cone beam CT kernels using the Katsevich algorithm"""
+"""Spiral cone beam CT CUDA kernels using the Katsevich algorithm"""
 
 from cphct.log import logging
+from cphct.misc import timelog
 
-# These are basic numpy functions exposed through npycore to use same numpy
-
-from cphct.npycore import int32, sqrt
+from cphct.cu.core import gpu_alloc_from_array
+from cphct.npycore import allowed_data_types
 
 
 def filter_chunk(
-    chunk_index,
     first_proj,
     last_proj,
     input_array,
     diff_array,
     rebin_array,
-    hilbert_array,
+    proj_filter_array,
     conv_array,
     output_array,
     conf,
@@ -56,8 +55,6 @@ def filter_chunk(
 
     Parameters
     ----------
-    chunk_index : int
-        Index of chunk in chunked backprojection.
     first_proj : int
         Index of first projection to include in chunked filtering.
     last_proj : int
@@ -70,7 +67,7 @@ def filter_chunk(
         Rebinning helper array.
     conv_array : gpuarray
         Convolution helper array.
-    hilbert_array : gpuarray
+    proj_filter_array : gpuarray
         Hilbert convolution helper array.
     output_array : gpuarray
         Output array.
@@ -79,77 +76,106 @@ def filter_chunk(
 
     Returns
     -------
-    output : float
-        Filtering time.
+    output : gpuarray
+        Filtered chunk of projections.
     """
 
-    cuda = conf['gpu']['module']
+    int32 = allowed_data_types['int32']
+
+    active_gpu_id = conf['gpu']['active_id']
+    gpu_stream = conf['app_state']['gpu']['streams'][active_gpu_id]
+
     gpu_layouts = conf['app_state']['gpu']['layouts']
-    rebin_block, rebin_grid = gpu_layouts['rebin']
-    proj_block, proj_grid = gpu_layouts['proj']
+    (rebin_block, rebin_grid) = gpu_layouts['rebin']
+    (proj_block, proj_grid) = gpu_layouts['proj']
+    prepared_kernels = conf['app_state']['gpu']['prepared_kernels']
+
     if conf['detector_shape'] == 'flat':
-        diff_chunk = conf['compute']['kernels']['flat_diff_chunk']
-        fwd_rebin_chunk = conf['compute']['kernels']['flat_fwd_rebin_chunk']
-        convolve_chunk = conf['compute']['kernels']['flat_convolve_chunk']
-        rev_rebin_chunk = conf['compute']['kernels']['flat_rev_rebin_chunk']
+        diff_chunk = prepared_kernels['flat_diff_chunk']
+        fwd_rebin_chunk = prepared_kernels['flat_fwd_rebin_chunk']
+        convolve_chunk = prepared_kernels['flat_convolve_chunk']
+        rev_rebin_chunk = prepared_kernels['flat_rev_rebin_chunk']
     elif conf['detector_shape'] == 'curved':
-        diff_chunk = conf['compute']['kernels']['curved_diff_chunk']
-        fwd_rebin_chunk = conf['compute']['kernels']['curved_fwd_rebin_chunk']
-        convolve_chunk = conf['compute']['kernels']['curved_convolve_chunk']
-        rev_rebin_chunk = conf['compute']['kernels']['curved_rev_rebin_chunk']
+        diff_chunk = prepared_kernels['curved_diff_chunk']
+        fwd_rebin_chunk = prepared_kernels['curved_fwd_rebin_chunk']
+        convolve_chunk = prepared_kernels['curved_convolve_chunk']
+        rev_rebin_chunk = prepared_kernels['curved_rev_rebin_chunk']
 
     # We keep data on the gpu for efficiency
 
-    chunk_time = 0.0
-    diff_time = diff_chunk(
+    if conf['log_level'] == logging.DEBUG:
+        timelog.set(conf, 'default', 'diff_chunk', barrier=True)
+
+    diff_chunk.prepared_async_call(
+        proj_grid,
+        proj_block,
+        gpu_stream,
         int32(first_proj),
         int32(last_proj),
-        input_array,
-        diff_array,
-        block=proj_block,
-        grid=proj_grid,
-        time_kernel=True,
+        gpu_alloc_from_array(input_array),
+        gpu_alloc_from_array(diff_array),
         )
-    cuda.Context.synchronize()
-    chunk_time += diff_time
-    fwd_rebin_time = fwd_rebin_chunk(
+
+    if conf['log_level'] == logging.DEBUG:
+        timelog.log(conf, 'default', 'diff_chunk', barrier=True)
+        timelog.set(conf, 'default', 'fwd_rebin_chunk')
+
+    fwd_rebin_chunk.prepared_async_call(
+        rebin_grid,
+        rebin_block,
+        gpu_stream,
         int32(first_proj),
         int32(last_proj),
-        diff_array,
-        rebin_array,
-        block=rebin_block,
-        grid=rebin_grid,
-        time_kernel=True,
+        gpu_alloc_from_array(diff_array),
+        gpu_alloc_from_array(rebin_array),
         )
-    cuda.Context.synchronize()
-    chunk_time += fwd_rebin_time
-    convolve_time = convolve_chunk(
+
+    if conf['log_level'] == logging.DEBUG:
+        timelog.log(conf, 'default', 'fwd_rebin_chunk', barrier=True)
+        timelog.set(conf, 'default', 'convolve_chunk')
+
+    convolve_chunk.prepared_async_call(
+        rebin_grid,
+        rebin_block,
+        gpu_stream,
         int32(first_proj),
         int32(last_proj),
-        rebin_array,
-        hilbert_array,
-        conv_array,
-        block=rebin_block,
-        grid=rebin_grid,
-        time_kernel=True,
+        gpu_alloc_from_array(rebin_array),
+        gpu_alloc_from_array(proj_filter_array),
+        gpu_alloc_from_array(conv_array),
         )
-    cuda.Context.synchronize()
-    chunk_time += convolve_time
-    rev_rebin_time = rev_rebin_chunk(
+
+    if conf['log_level'] == logging.DEBUG:
+        timelog.log(conf, 'default', 'convolve_chunk', barrier=True)
+        timelog.set(conf, 'default', 'rev_rebin_chunk')
+
+    rev_rebin_chunk.prepared_async_call(
+        proj_grid,
+        proj_block,
+        gpu_stream,
         int32(first_proj),
         int32(last_proj),
-        conv_array,
-        output_array,
-        block=proj_block,
-        grid=proj_grid,
-        time_kernel=True,
+        gpu_alloc_from_array(conv_array),
+        gpu_alloc_from_array(output_array),
         )
-    cuda.Context.synchronize()
-    chunk_time += rev_rebin_time
-    logging.debug('kernel times %s %s %s %s s' % (diff_time,
-                  fwd_rebin_time, convolve_time, rev_rebin_time))
-    logging.debug('finished filter kernels in %ss' % chunk_time)
-    return chunk_time
+
+    if conf['log_level'] == logging.DEBUG:
+        timelog.log(conf, 'default', 'rev_rebin_chunk', barrier=True)
+
+        logging.debug('filter kernel times %s %s %s %s s'
+                      % (timelog.get(conf, 'default', 'diff_chunk'),
+                      timelog.get(conf, 'default', 'fwd_rebin_chunk'),
+                      timelog.get(conf, 'default', 'convolve_chunk'),
+                      timelog.get(conf, 'default', 'rev_rebin_chunk')))
+
+        logging.debug('finished filter kernels in %ss'
+                      % (timelog.get(conf, 'default', 'diff_chunk')
+                      + timelog.get(conf, 'default', 'fwd_rebin_chunk')
+                      + timelog.get(conf, 'default', 'convolve_chunk')
+                      + timelog.get(conf, 'default', 'rev_rebin_chunk'
+                      )))
+
+    return output_array
 
 
 def backproject_chunk(
@@ -192,32 +218,50 @@ def backproject_chunk(
 
     Returns
     -------
-    output : float
-        Backprojection time.
+    output : gpuarray
+        Backprojected volume chunk
     """
 
-    cuda = conf['gpu']['module']
-    gpu_layouts = conf['app_state']['gpu']['layouts']
-    backproject_block, backproject_grid = gpu_layouts['backproject']
-    if conf['detector_shape'] == 'flat':
-        backproject_chunk = conf['compute']['kernels']['flat_backproj_chunk']
-    elif conf['detector_shape'] == 'curved':
-        backproject_chunk = conf['compute']['kernels']['curved_backproj_chunk']
+    int32 = allowed_data_types['int32']
 
-    chunk_time = backproject_chunk(
+    gpu_layouts = conf['app_state']['gpu']['layouts']
+
+    active_gpu_id = conf['gpu']['active_id']
+    gpu_stream = conf['app_state']['gpu']['streams'][active_gpu_id]
+
+    (backproject_block, backproject_grid) = gpu_layouts['backproject']
+    prepared_kernels = conf['app_state']['gpu']['prepared_kernels']
+
+    if conf['detector_shape'] == 'flat':
+        backproject_chunk = prepared_kernels['flat_backproject_chunk']
+    elif conf['detector_shape'] == 'curved':
+        backproject_chunk = prepared_kernels['curved_backproject_chunk']
+
+    if conf['log_level'] == logging.DEBUG:
+        timelog.set(conf, 'default', 'backproject_chunk', barrier=True)
+
+    backproject_chunk.prepared_async_call(
+        backproject_grid,
+        backproject_block,
+        gpu_stream,
         int32(chunk_index),
         int32(first_proj),
         int32(last_proj),
         int32(first_z),
         int32(last_z),
-        input_array,
-        row_mins_array,
-        row_maxs_array,
-        output_array,
-        block=backproject_block,
-        grid=backproject_grid,
-        time_kernel=True,
+        gpu_alloc_from_array(input_array),
+        gpu_alloc_from_array(row_mins_array),
+        gpu_alloc_from_array(row_maxs_array),
+        gpu_alloc_from_array(output_array),
         )
-    cuda.Context.synchronize()
-    logging.debug('finished backproject kernel in %ss' % chunk_time)
-    return chunk_time
+
+    if conf['log_level'] == logging.DEBUG:
+        timelog.log(conf, 'default', 'backproject_chunk', barrier=True)
+
+        logging.debug('finished backproject kernel in %ss'
+                      % timelog.get(conf, 'default', 'backproject_chunk'
+                      ))
+
+    return output_array
+
+

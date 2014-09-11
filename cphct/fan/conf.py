@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# conf - shared fan beam configuration helpers
-# Copyright (C) 2011  The Cph CT Toolbox Project lead by Brian Vinter
+# conf - Shared fan beam configuration helpers
+# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -61,12 +61,12 @@ def _shared_opts():
 
 
 def _npy_opts():
-    """Fan beam options for numpy engine
+    """Fan beam options for NumPy engine
 
     Returns
     -------
     output : dict
-        Returns a dictionary of numpy specific options helper dictionaries.
+        Returns a dictionary of NumPy specific options helper dictionaries.
     """
 
     opts = {}
@@ -74,12 +74,25 @@ def _npy_opts():
 
 
 def _cu_opts():
-    """Fan beam options for cuda engine
+    """Fan beam options for CUDA engine
 
     Returns
     -------
     output : dict
-        Returns a dictionary of cuda specific options helper dictionaries.
+        Returns a dictionary of CUDA specific options helper dictionaries.
+    """
+
+    opts = {}
+    return opts
+
+
+def _cl_opts():
+    """Fan beam options for OpenCL engine
+
+    Returns
+    -------
+    output : dict
+        Returns a dictionary of OpenCL specific options helper dictionaries.
     """
 
     opts = {}
@@ -101,12 +114,12 @@ def default_fan_opts():
 
 
 def default_fan_npy_opts():
-    """Numpy specific options
+    """NumPy specific options
 
     Returns
     -------
     output : dict
-        Returns a dictionary of numpy specific fan options helper
+        Returns a dictionary of NumPy specific fan options helper
         dictionaries.
     """
 
@@ -117,17 +130,32 @@ def default_fan_npy_opts():
 
 
 def default_fan_cu_opts():
-    """Cuda specific options
+    """CUDA specific options
 
     Returns
     -------
     output : dict
-        Returns a dictionary of cuda specific fan options helper dictionaries.
+        Returns a dictionary of CUDA specific fan options helper dictionaries.
     """
 
     opts = default_base_cu_opts()
     opts.update(_shared_opts())
     opts.update(_cu_opts())
+    return opts
+
+
+def default_fan_cl_opts():
+    """OpenCL specific options
+
+    Returns
+    -------
+    output : dict
+        Returns a dictionary of OpenCL specific fan options helper dictionaries.
+    """
+
+    opts = default_base_cl_opts()
+    opts.update(_shared_opts())
+    opts.update(_cl_opts())
     return opts
 
 
@@ -147,12 +175,12 @@ def default_fan_conf():
 
 
 def default_fan_npy_conf():
-    """Configuration dictionary with default values for numpy engine
+    """Configuration dictionary with default values for NumPy engine
 
     Returns
     -------
     output : dict
-        Returns a dictionary of base numpy conf settings.
+        Returns a dictionary of base NumPy conf settings.
     """
 
     conf = {}
@@ -162,15 +190,30 @@ def default_fan_npy_conf():
 
 
 def default_fan_cu_conf():
-    """Configuration dictionary with default values for cuda engine
+    """Configuration dictionary with default values for CUDA engine
 
     Returns
     -------
     output : dict
-        Returns a dictionary of base cuda conf settings.
+        Returns a dictionary of base CUDA conf settings.
     """
 
     conf = {}
     for (key, val) in default_fan_cu_opts().items():
+        conf[key] = val['default']
+    return conf
+
+
+def default_fan_cl_conf():
+    """Configuration dictionary with default values for OpenCL engine
+
+    Returns
+    -------
+    output : dict
+        Returns a dictionary of base OpenCL conf settings.
+    """
+
+    conf = {}
+    for (key, val) in default_fan_cl_opts().items():
         conf[key] = val['default']
     return conf

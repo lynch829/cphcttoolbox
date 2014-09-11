@@ -37,11 +37,12 @@
  * Convert reconstructed raw voxels to the hounsfield scale
  */
 
-__global__ void hounsfield_scale(float *recon_data,
-				 float *raw_voxel_water) {
+KERNEL void hounsfield_scale(
+            GLOBALMEM float *recon_data,
+		    	GLOBALMEM float *raw_voxel_water) {
    
-   unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;   
-   unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+   unsigned int y = GET_GLOBAL_ID_Y;   
+   unsigned int x = GET_GLOBAL_ID_X;
 
    unsigned int i;
    unsigned int voxel_idx = VOLUME_SLICE_IDX(y,x);

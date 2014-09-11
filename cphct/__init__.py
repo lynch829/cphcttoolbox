@@ -4,7 +4,7 @@
 #
 # --- BEGIN_HEADER ---
 #
-# __init__ - shared lib module init
+# __init__ - Shared lib module init
 # Copyright (C) 2011-2014  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
@@ -46,7 +46,7 @@ __all__ = [
     'cu',
     'npy',
     'npycore',
-    'ocl',
+    'cl',
     ]
 
 # Collect all package information here for easy use from scripts and helpers
@@ -56,7 +56,7 @@ short_name = 'cphcttoolbox'
 
 # IMPORTANT: Please keep version in sync with doc-src/README.t2t
 
-version_tuple = (1, 0, 4)
+version_tuple = (1, 1, 0)
 version_suffix = ''
 version_string = '.'.join([str(i) for i in version_tuple]) + version_suffix
 package_version = '%s %s' % (package_name, version_string)
@@ -64,18 +64,18 @@ project_team = 'The Cph CT Toolbox project lead by Brian Vinter'
 project_email = 'brian DOT vinter AT gmail DOT com'
 maintainer_team = 'The Cph CT Toolbox maintainers'
 maintainer_email = 'jonas DOT bardino AT gmail DOT com'
-project_url = 'http://code.google.com/p/cphcttoolbox/'
-download_url = 'http://pypi.python.org/pypi/cphcttoolbox/'
+project_url = 'https://code.google.com/p/cphcttoolbox/'
+download_url = 'https://pypi.python.org/packages/source/c/cphcttoolbox/'
 license_name = 'GNU GPL v2'
 short_desc = \
     'Cph CT Toolbox is a selection of Computed Tomography tools'
 long_desc = \
     """Copenhagen Computed Tomography Toolbox is a collection of
 applications and libraries for flexible and efficient CT reconstruction. The
-toolbox generally take a set of projections (X-ray intensity measurements) and
+toolbox apps generally take a set of projections (X-ray intensity measurements) and
 filter and back project them in order to recreate the image or volume that the
 projections represent.
-The project includes both mostly informative CPU implementations and efficient
+The project includes both mostly informative CPU implementations and highly efficient
 GPU implementations.
 """
 project_class = [

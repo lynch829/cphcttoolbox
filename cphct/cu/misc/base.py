@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# misc - cuda core misc helpers
-# Copyright (C) 2011-2012  The Cph CT Toolbox Project lead by Brian Vinter
+# misc - CUDA core misc helpers
+# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -27,10 +27,11 @@
 # -- END_HEADER ---
 #
 
-"""Cuda core misc helper functions"""
+"""CUDA core misc helper functions"""
 
 from cphct.npycore import allowed_cdata_types
 from cphct.cu import gpuarray, elementwise
+from cphct.cu.core import gpu_alloc_from_array
 
 
 def __dtype_npy_to_cu(data):
@@ -89,16 +90,19 @@ def gpuarray_copy(conf, data, out=None):
     if out is None:
         out = gpuarray.empty_like(data)
 
-    gpu_module.memcpy_dtod(out.gpudata, data.gpudata, data.nbytes)
+    gpu_module.memcpy_dtod(gpu_alloc_from_array(out),
+                           gpu_alloc_from_array(data), data.nbytes)
 
     return out
 
 
-def gpuarray_square(data, out=None):
+def gpuarray_square(conf, data, out=None):
     """Squares gpuarray
     
     Parameters
     ----------
+    conf : dict                      
+        Configuration dictionary.
     data : gpuarray
         Input gpuarray to square
     out : gpuarray, optional
@@ -123,11 +127,11 @@ def gpuarray_square(data, out=None):
 
     kernel_args = '%sdata, %sout' % (__dtype_npy_to_cu(data),
             __dtype_npy_to_cu(data))
-    kernel_code = 'out[i] = data[i] * data[i]'
+    kernels_code = 'out[i] = data[i] * data[i]'
     kernel_name = 'square_kernel'
 
     square_kernel = elementwise.ElementwiseKernel(kernel_args,
-            kernel_code, kernel_name)
+            kernels_code, kernel_name)
 
     square_kernel(data, out)
 

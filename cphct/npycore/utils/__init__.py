@@ -38,7 +38,7 @@ from incorrectly moving following comments above module doc string'''
 # Functions available through cphct.npycore.utils
 
 from cphct.npycore.utils.base import prepare_output, normalize_array, \
-    clip_array, dump_array, square_array, flux_to_proj, \
+    clip_array, dump_array, verify_array, square_array, flux_to_proj, \
     checksum_matrix, log_checksum, check_norm, interpolate_proj_pixels, \
     supported_proj_filters, generate_proj_filter, hounsfield_scale
 

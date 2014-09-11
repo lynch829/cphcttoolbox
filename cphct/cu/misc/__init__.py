@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# __init__ - miscellaneous cuda helper functions shared by all modules.
-# Copyright (C) 2012  The Cph CT Toolbox Project lead by Brian Vinter
+# __init__ - miscellaneous CUDA helper functions shared by all modules.
+# Copyright (C) 2012-2014  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -27,7 +27,7 @@
 # -- END_HEADER ---
 #
 
-"""Cph CT Toolbox miscellaneous cuda helper functions shared by all modules"""
+"""Cph CT Toolbox miscellaneous CUDA helper functions shared by all modules"""
 
 __dummy = \
     '''This dummy right after the module doc string prevents PythonTidy

@@ -2,8 +2,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# kernels - FDK cone beam reconstruction CUDA Kernels
-# Copyright (C) 2011  The CT-Toolbox Project lead by Brian Vinter
+# base - FDK cone beam reconstruction OpenCL Kernels
+# Copyright (C) 2011-2013  The CT-Toolbox Project lead by Brian Vinter
 #
 # This file is part of CT-Toolbox.
 #
@@ -26,7 +26,7 @@
 */
 
 /*
-Pure kernels for circular cone beam CT in CUDA using the FDK algorithm
+Pure kernels for circular cone beam CT in OpenCL using the FDK algorithm
 
 Requires external init of geometry configuration like scan_radius and so on.
 This may come from init.cu or be hard coded from runtime generated code.
@@ -37,17 +37,19 @@ This may come from init.cu or be hard coded from runtime generated code.
 
 #define TRANSFORM_MATRIX_SIZE 12
 #define Z_SLICE_SIZE (rt_y_voxels*rt_x_voxels)
-#define SOURCE_DETECTOR_DISTANCE (rt_source_distance+rt_detector_distance)
+#define SOURCE_DETECTOR_DISTANCE ((float)rt_source_distance+rt_detector_distance)
 
 
 /* Macros fixing CUDA quirks */
 
+// Must force positive values in powf
 #define pow2f(x) powf(abs(x), 2)
 
 
 /* Flat indexing macros */
 
 #define COMPLEX_PROJ_REAL_IDX(y,x) (((y)*rt_proj_filter_width*2)+(x*2))
+#define COMPLEX_PROJ_IMAG_IDX(y,x) (((y)*rt_proj_filter_width*2)+(x*2)+(1))
 #define COMPLEX_PROJ_IDX(y,x) (((y)*rt_proj_filter_width*2)+(x))
 #define PROJ_IDX(y,x) ((y)*rt_detector_columns+(x))
 #define VOLUME_SLICE_IDX(y,x) (((y)*rt_x_voxels)+(x))
@@ -55,51 +57,70 @@ This may come from init.cu or be hard coded from runtime generated code.
 
 /* Weight projection data */
 
-__global__ void weight_proj(float *proj,
-			    unsigned int *proj_row_offset,
-			    float *weight) {
+KERNEL void weight_proj(GLOBALMEM float *proj,
+                const unsigned int proj_row_offset,
+                GLOBALMEM float *weight) {
 
-   unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;   
-   unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+   unsigned int y = GET_GLOBAL_ID_Y;   
+   unsigned int x = GET_GLOBAL_ID_X;
       
-   proj[PROJ_IDX(y,x)] *= weight[PROJ_IDX(y+*proj_row_offset,x)];
+   proj[PROJ_IDX(y,x)] *= weight[PROJ_IDX(y+proj_row_offset,x)];
 }
 
 
 /* 
  * Convert float projection matrix to complex matrix
  * with the number of columns matching the projection filter width.
- * The complex projection is used when filteren projection data
+ * The complex projection is used when filtering projection data
  * in the frequency domain.
- * We represent a complex value as two contigours float values,
+ * We represent a complex value as two contiguous float values,
  * one for the real part and one for the imaginary part.
  */
 
-__global__ void proj_to_complex(float *complex_proj,
-				float *float_proj) {
+KERNEL void proj_to_complex(
+            GLOBALMEM float *complex_proj,
+				GLOBALMEM float *float_proj,
+            const unsigned int nr_proj_rows) {
 
-   unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;   
-   unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
-      
-   complex_proj[COMPLEX_PROJ_REAL_IDX(y,x)] = float_proj[PROJ_IDX(y,x)];
+   unsigned int y = GET_GLOBAL_ID_Y;   
+   unsigned int x = GET_GLOBAL_ID_X;
+   
+   float real_value;
+   float imag_value;
+
+   // Complex projection entries that doesn't map directly 
+   // to a projection pixel value are set to zero.
+   // Projection rows that are not used in the current chunk are 
+   // also set to zero.
+   
+   real_value = (x < rt_detector_columns &&
+                 y < nr_proj_rows) ? 
+                 float_proj[PROJ_IDX(y,x)] : 0.0f;
+   
+   imag_value = 0.0f;
+
+   complex_proj[COMPLEX_PROJ_REAL_IDX(y,x)] = real_value;
+   complex_proj[COMPLEX_PROJ_IMAG_IDX(y,x)] = imag_value;
+
 }
 
 
 /* 
- * The projection is in the complex frequence domain at this point,
- * this means it has an real and image part each represented as a float.
+ * The projection is in the complex frequency domain at this point,
+ * this means it has an real and imaginary part each represented as a float.
  * The length of the complex frequency projection is therefore
  * two times the projection filter width
  */
 
-__global__ void filter_proj(float *complex_proj,
-			    float *filter) {
+KERNEL void filter_proj(
+            GLOBALMEM float *complex_proj,
+			   GLOBALMEM float *filter) {
 
-   unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;   
-   unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+   unsigned int y = GET_GLOBAL_ID_Y;   
+   unsigned int x = GET_GLOBAL_ID_X;
        
    // x is the index for the complex frequency projection
-   // We divede by two in order to get the filter index
+   // We divide by two in order to get the filter index
 
    int filter_idx = x>>1;
 
@@ -112,11 +133,12 @@ __global__ void filter_proj(float *complex_proj,
  * (see proj_to_complex for more details)
  */
 
-__global__ void complex_to_proj(float *float_proj,
-				float *complex_proj) {
+KERNEL void complex_to_proj(
+            GLOBALMEM float *float_proj,
+				GLOBALMEM float *complex_proj) {
 
-   unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;   
-   unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+   unsigned int y = GET_GLOBAL_ID_Y;   
+   unsigned int x = GET_GLOBAL_ID_X;
       
    float_proj[PROJ_IDX(y,x)] = complex_proj[COMPLEX_PROJ_REAL_IDX(y,x)];
 }
@@ -124,36 +146,37 @@ __global__ void complex_to_proj(float *float_proj,
 
 /* Generate volume weight based on projection angle and voxel coordinates */
 
-__global__ void generate_volume_weight(float *volume_weight_matrix,
-				       float *combined_matrix,
-				       float *proj_angle_rad) {
+KERNEL void generate_volume_weight(
+            GLOBALMEM float *volume_weight_matrix,
+				GLOBALMEM float *combined_matrix,
+				const float proj_angle_rad) {
    
-   unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
-   unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+   unsigned int y = GET_GLOBAL_ID_Y;
+   unsigned int x = GET_GLOBAL_ID_X;
 
-   float sincos[2];
+   PRIVATEMEM float sincosval[2];
    float combined[2];
    
    combined[0] = combined_matrix[VOLUME_SLICE_IDX(y,x)];
    combined[1] = combined_matrix[VOLUME_SLICE_IDX(y,x) + Z_SLICE_SIZE];
 
-   sincosf(*proj_angle_rad, &sincos[0], &sincos[1]);
+   sincosf(proj_angle_rad, &sincosval[0], &sincosval[1]);
      
 #ifdef rt_detector_shape_flat
    volume_weight_matrix[VOLUME_SLICE_IDX(y,x)] = 
      (pow2f(rt_source_distance) /
 	 pow2f(rt_source_distance
-	       - sincos[1] * combined[0]
-	       - sincos[0] * combined[1]))
+	       - sincosval[1] * combined[0]
+	       - sincosval[0] * combined[1]))
      * rt_volume_weight_factor;
 #else
    volume_weight_matrix[VOLUME_SLICE_IDX(y,x)] = 
      (pow2f(rt_source_distance) /
 	 (pow2f(rt_source_distance 
-		- (sincos[1] * combined[0]
-		   +  sincos[0] * combined[1]))
-	   + pow2f(-sincos[0] * combined[0]
-		   + sincos[1] * combined[1])))
+		- (sincosval[1] * combined[0]
+		   +  sincosval[0] * combined[1]))
+	   + pow2f(-sincosval[0] * combined[0]
+		   + sincosval[1] * combined[1])))
      * rt_volume_weight_factor;
 #endif
 }
@@ -163,11 +186,12 @@ __global__ void generate_volume_weight(float *volume_weight_matrix,
  * This function backprojects one voxel from the projection data,
  */
 
-__forceinline__ __device__ void backproject_slice(float *recon_voxel,
-                                                  float *transform_matrix, 
-                                                  float *combined,
-                                                  float *proj_data,
-						  unsigned int *proj_row_offset) {
+FORCEINLINE DEVICE void backproject_slice(
+            float *recon_voxel,
+            float *transform_matrix, 
+            float *combined,
+            GLOBALMEM float *proj_data,
+				unsigned int *proj_row_offset) {
 
    // First calculate the dot product between transform and combined
 
@@ -202,21 +226,21 @@ __forceinline__ __device__ void backproject_slice(float *recon_voxel,
    map_col = int(rint(flat_map_col));
    map_row = int(rint(flat_map_row));
 #else
-   float alpha = atanf(flat_map_col/float(SOURCE_DETECTOR_DISTANCE));
+   float alpha = atanf(flat_map_col/SOURCE_DETECTOR_DISTANCE);
          
    map_col = int(rintf(alpha 
-		       * float(SOURCE_DETECTOR_DISTANCE) 
-		       * float(1.0f/rt_detector_pixel_width) 
-		       + float(rt_detector_column_shift)));
+		       * SOURCE_DETECTOR_DISTANCE 
+		       * (1.0f/rt_detector_pixel_width)
+		       + rt_detector_column_shift));
            
    map_row = int(rintf(flat_map_row 
 		       * cosf(alpha) 
-		       * float(1.0f/rt_detector_pixel_height) 
-		       + float(rt_detector_row_shift)));
+		       * (1.0f/rt_detector_pixel_height)
+		       + rt_detector_row_shift));
 #endif
 
    
-   // Mask out voxel if the ray passing through it doensn't hit the detector
+   // Mask out voxel if the ray passing through it doesn't hit the detector
 
    mask = (map_col>=0) & (map_col<rt_detector_columns) 
      & (map_row>=0) & (map_row<rt_detector_rows);
@@ -236,24 +260,24 @@ __forceinline__ __device__ void backproject_slice(float *recon_voxel,
  * backprojects the projection data for each slice 
  */
 
-__global__ void backproject(float *recon_chunk,
-			    float *proj_data,
-			    unsigned int *proj_row_offset,
-			    float *proj_angle_rad,
-			    unsigned int *chunk_index,
-			    float *z_voxel_coordinates,
-			    float *transform_matrix,
-			    float *combined_matrix,
-			    float *volume_weight_matrix) {
+KERNEL void backproject(
+            GLOBALMEM float *recon_chunk,
+			   GLOBALMEM float *proj_data,
+			   const unsigned int proj_row_offset,
+			   const unsigned int chunk_index,
+			   GLOBALMEM float *z_voxel_coordinates,
+			   GLOBALMEM float *transform_matrix,
+			   GLOBALMEM float *combined_matrix,
+			   GLOBALMEM float *volume_weight_matrix) {
 
-   unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
-   unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+   unsigned int y = GET_GLOBAL_ID_Y;
+   unsigned int x = GET_GLOBAL_ID_X;
    
    // Cache values z-voxel coordinates re-used in each for loop iteration
 
-   __shared__ float shared_z_voxel_coordinates[rt_z_voxels];
+   SHAREDMEM float shared_z_voxel_coordinates[rt_z_voxels];
 
-   int btidx = threadIdx.y * blockDim.x + threadIdx.x;
+   int btidx = THREAD_ID_Y * BLOCK_DIM_X + THREAD_ID_X;
    int shared_index = btidx;
    
    shared_index = btidx;
@@ -261,10 +285,10 @@ __global__ void backproject(float *recon_chunk,
       shared_z_voxel_coordinates[shared_index] = 
 	z_voxel_coordinates[shared_index];
       
-      shared_index += blockDim.x*blockDim.y;
+      shared_index += BLOCK_DIM_X*BLOCK_DIM_Y;
    }
 
-   __syncthreads();
+   sync_shared_mem();
 
    
    // Initialize register variables
@@ -276,7 +300,7 @@ __global__ void backproject(float *recon_chunk,
 #endif
    
    unsigned int i;
-   unsigned int start_z_vox = *chunk_index * rt_chunk_size;
+   unsigned int start_z_vox = chunk_index * rt_chunk_size;
    unsigned int end_z_vox = start_z_vox + rt_chunk_size;
 
    float local_transform_matrix[TRANSFORM_MATRIX_SIZE];
@@ -292,7 +316,7 @@ __global__ void backproject(float *recon_chunk,
    // Loop over the slices to reconstruct
 
    unsigned int voxel_index = VOLUME_SLICE_IDX(y,x);
-   unsigned int reg_proj_row_offset = *proj_row_offset;
+   unsigned int reg_proj_row_offset = proj_row_offset;
    
    for (i=start_z_vox; i<end_z_vox; i++) {
       combined[2] = shared_z_voxel_coordinates[i];
@@ -311,5 +335,3 @@ __global__ void backproject(float *recon_chunk,
       voxel_index += Z_SLICE_SIZE;
    }
 }
-
-

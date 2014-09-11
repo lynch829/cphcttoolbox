@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # tools - cone beam back end functions shared by tools
-# Copyright (C) 2012-2013  The Cph CT Toolbox Project lead by Brian Vinter
+# Copyright (C) 2012-2014  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -42,7 +42,7 @@ from cphct.conf import allowed_engines, default_engine, bool_value
 from cphct.io import path_expander, collapse_path, create_path_dir
 from cphct.log import logging, setup_log, allowed_log_levels, \
     default_level
-from cphct.npycore import zeros, allowed_data_types
+from cphct.npycore import zeros
 from cphct.npycore.io import get_npy_data, get_npy_total_size, \
     npy_alloc, npy_free_all, save_auto
 from cphct.plugins import load_plugins, execute_plugin

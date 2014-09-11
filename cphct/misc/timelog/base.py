@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # timelog - time logging module shared by all modules.
-# Copyright (C) 2012  The Cph CT Toolbox Project lead by Brian Vinter
+# Copyright (C) 2012-2014  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -43,18 +43,10 @@ def __barrier(conf):
     ----------
     conf : dict
        Dictionary with configuration values.
-       
-    Returns
-    -------
-    output : dict
-       Dictionary with configuration values. 
     """
 
-    if 'context' in conf['gpu']:
-        for gpu_id in conf['gpu']['context']:
-            conf['gpu']['context'][gpu_id].synchronize()
-
-    return conf
+    if 'barrier' in conf['gpu']:
+        conf['gpu']['barrier'](conf)
 
 
 def init(conf, default, verbose):

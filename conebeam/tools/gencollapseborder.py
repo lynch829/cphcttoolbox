@@ -31,7 +31,7 @@
 
 import sys
 
-from cphct.cone.conf import float_value, int_value, colon_int_values, \
+from cphct.cone.conf import int_value, colon_int_values, \
     default_cone_npy_conf, default_cone_npy_opts, enable_conf_option, \
     engine_opts, engine_conf, parse_setup, ParseError
 from cphct.cone.npy.io import fill_cone_npy_conf

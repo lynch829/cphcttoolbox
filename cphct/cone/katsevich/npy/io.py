@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# io - numpy specific input/ouput helpers
-# Copyright (C) 2011-2012  The Cph CT Toolbox Project lead by Brian Vinter
+# io - NumPy specific input/ouput helpers
+# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -27,7 +27,7 @@
 # -- END_HEADER ---
 #
 
-"""Numpy specific input/output helper functions"""
+"""NumPy specific input/output helper functions"""
 
 from cphct.cone.npy.io import fill_cone_npy_conf
 from cphct.cone.katsevich.npycore.io import fill_katsevich_npycore_conf
@@ -36,7 +36,7 @@ from cphct.cone.katsevich.npycore.io import fill_katsevich_npycore_conf
 def fill_katsevich_npy_conf(conf):
     """Remaining configuration after handling command line options.
     Casts all floating point results using float data type from conf.
-    This version is specifically for the numpy engine.
+    This version is specifically for the NumPy engine.
 
     Parameters
     ----------
@@ -46,7 +46,7 @@ def fill_katsevich_npy_conf(conf):
     Returns
     -------
     output : dict
-        Returns configuration dictionary filled with numpy specific settings.
+        Returns configuration dictionary filled with NumPy specific settings.
     """
 
     fill_cone_npy_conf(conf)

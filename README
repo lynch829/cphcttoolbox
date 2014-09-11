@@ -1,5 +1,5 @@
 CphCT Toolbox README
-Last updated/generated 21-05-2014 10:20
+Last updated/generated 11-09-2014 15:18
 
 
   1. Cph CT Toolbox
@@ -43,10 +43,10 @@ about the individual tools.
 
 The CphCT Toolbox relies on Python[1] and Numpy[2] for all core
 functionality. Optimized CUDA and OpenCL application engines
-additionally require the PyCUDA[3] and PyOpenCL[4] libraries which in turn
-require access to working CUDA and OpenCL runtimes. Please refer to the
-individual documentation pages online in order to satisfy those
-dependencies.
+additionally require the PyCUDA[3], PyOpenCL[4] and PyFFT[9] libraries
+which in turn require access to working CUDA and OpenCL runtimes. Please
+refer to the individual documentation pages online in order to satisfy
+those dependencies.
 
 The toolbox should work with any Python-2.5+ interpreter and a fairly
 recent Numpy installation, but we have only tested with Python 2.6+ and
@@ -78,7 +78,7 @@ Simply run pip with the default pypi.python.org as package source:
 
 Alternatively you can point pip to a specific version:
 
-  pip install https://pypi.python.org/packages/source/c/cphcttoolbox/cphcttoolbox-1.0.4.zip
+  pip install https://pypi.python.org/packages/source/c/cphcttoolbox/cphcttoolbox-1.1.0.zip
 
 If for some reason you can't or don't want to install globally on your
 system with pip you may still be able to use virtualenv[6] to
@@ -95,7 +95,7 @@ Simply run easy_install with the default pypi.python.org as package source:
 
 Alternatively you can point easy_install to a specific version:
 
-  easy_install https://pypi.python.org/packages/source/c/cphcttoolbox/cphcttoolbox-1.0.4.zip
+  easy_install https://pypi.python.org/packages/source/c/cphcttoolbox/cphcttoolbox-1.1.0.zip
 
 
 	3.3. Manual Installation
@@ -126,10 +126,10 @@ code without installing. Three steps are required to use this setup:
 Now you can run the applications using the absolute application paths. 
 
 An ultra short command line example to illustrate it:
-  wget https://pypi.python.org/packages/source/c/cphcttoolbox/cphcttoolbox-1.0.4.zip
-  unzip cphcttoolbox-1.0.4.zip
-  export PYTHONPATH=${PWD}/cphcttoolbox-1.0.4
-  python cphcttoolbox-1.0.4/conebeam/katsevich/katsevich.py --help
+  wget https://pypi.python.org/packages/source/c/cphcttoolbox/cphcttoolbox-1.1.0.zip
+  unzip cphcttoolbox-1.1.0.zip
+  export PYTHONPATH=${PWD}/cphcttoolbox-1.1.0
+  python cphcttoolbox-1.1.0/conebeam/katsevich/katsevich.py --help
 
 
 The archive download and unpack may be replaced by a checkout from the
@@ -196,5 +196,5 @@ at the official web site.
  6. http://pypi.python.org/pypi/virtualenv
  7. http://packages.python.org/distribute/easy_install.html
  8. http://thingsilearned.com/2009/04/13/easy_install-uninstalling/
-
+ 9. https://pypi.python.org/pypi/pyfft
 

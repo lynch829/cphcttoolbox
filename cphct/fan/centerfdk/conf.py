@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# conf - shared center slice fdk configuration helpers
-# Copyright (C) 2011-2012  The Cph CT Toolbox Project lead by Brian Vinter
+# conf - Shared center slice FDK configuration helpers
+# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -37,7 +37,8 @@ from incorrectly moving following comments above module doc string'''
 # parent module
 
 from cphct.fan.conf import *
-from cphct.cone.fdk.conf import default_fdk_npy_opts, default_fdk_cu_opts
+from cphct.cone.fdk.conf import default_fdk_npy_opts, default_fdk_cu_opts, \
+     default_fdk_cl_opts
 
 
 def _shared_opts():
@@ -100,12 +101,12 @@ def _shared_opts():
 
 
 def _npy_opts():
-    """FDK options for numpy engine
+    """Center FDK options for NumPy engine
 
     Returns
     -------
     output : dict
-        Returns a dictionary of numpy specific options helper dictionaries.
+        Returns a dictionary of NumPy specific options helper dictionaries.
     """
 
     opts = {}
@@ -113,12 +114,25 @@ def _npy_opts():
 
 
 def _cu_opts():
-    """FDK options for cuda engine
+    """Center FDK options for CUDA engine
 
     Returns
     -------
     output : dict
-        Returns a dictionary of cuda specific options helper dictionaries.
+        Returns a dictionary of CUDA specific options helper dictionaries.
+    """
+
+    opts = {}
+    return opts
+
+
+def _cl_opts():
+    """Center FDK options for OpenCL engine
+
+    Returns
+    -------
+    output : dict
+        Returns a dictionary of OpenCL specific options helper dictionaries.
     """
 
     opts = {}
@@ -140,12 +154,12 @@ def default_centerfdk_opts():
 
 
 def default_centerfdk_npy_opts():
-    """Numpy specific options
+    """NumPy specific options
 
     Returns
     -------
     output : dict
-        Returns a dictionary of numpy specific centerfdk options helper
+        Returns a dictionary of NumPy specific centerfdk options helper
         dictionaries.
     """
 
@@ -160,12 +174,12 @@ def default_centerfdk_npy_opts():
 
 
 def default_centerfdk_cu_opts():
-    """Cuda specific options
+    """CUDA specific options
 
     Returns
     -------
     output : dict
-        Returns a dictionary of cuda specific centerfdk options helper
+        Returns a dictionary of CUDA specific centerfdk options helper
         dictionaries.
     """
 
@@ -176,6 +190,26 @@ def default_centerfdk_cu_opts():
     opts.update(default_fdk_cu_opts())
     opts.update(_shared_opts())
     opts.update(_cu_opts())
+    return opts
+
+
+def default_centerfdk_cl_opts():
+    """OpenCL specific options
+
+    Returns
+    -------
+    output : dict
+        Returns a dictionary of OpenCL specific centerfdk options helper
+        dictionaries.
+    """
+
+    opts = default_fan_cl_opts()
+
+    # Insert cone fdk defaults and override with center slice defaults
+
+    opts.update(default_fdk_cl_opts())
+    opts.update(_shared_opts())
+    opts.update(_cl_opts())
     return opts
 
 
@@ -195,12 +229,12 @@ def default_centerfdk_conf():
 
 
 def default_centerfdk_npy_conf():
-    """Configuration dictionary with default values for numpy engine
+    """Configuration dictionary with default values for NumPy engine
 
     Returns
     -------
     output : dict
-        Returns a dictionary of centerfdk numpy conf settings.
+        Returns a dictionary of centerfdk NumPy conf settings.
     """
 
     conf = {}
@@ -210,15 +244,30 @@ def default_centerfdk_npy_conf():
 
 
 def default_centerfdk_cu_conf():
-    """Configuration dictionary with default values for cuda engine
+    """Configuration dictionary with default values for CUDA engine
 
     Returns
     -------
     output : dict
-        Returns a dictionary of centerfdk cuda conf settings.
+        Returns a dictionary of centerfdk CUDA conf settings.
     """
 
     conf = {}
     for (key, val) in default_centerfdk_cu_opts().items():
+        conf[key] = val['default']
+    return conf
+
+
+def default_centerfdk_cl_conf():
+    """Configuration dictionary with default values for OpenCL engine
+
+    Returns
+    -------
+    output : dict
+        Returns a dictionary of centerfdk OpenCL conf settings.
+    """
+
+    conf = {}
+    for (key, val) in default_centerfdk_cl_opts().items():
         conf[key] = val['default']
     return conf

@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # resetproj - plugin to reset all projections to a provided value or template
-# Copyright (C) 2012-2013  The Cph CT Toolbox Project lead by Brian Vinter
+# Copyright (C) 2012-2014  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #

@@ -1,5 +1,5 @@
 Cph CT Toolbox
-Last updated 28-06-2013 10:58
+Last updated 11-09-2014 15:18
 
 
   1. Introduction
@@ -10,21 +10,29 @@ Last updated 28-06-2013 10:58
     3.3. Katsevich
   4. Reconstruction Examples
     4.1. Center FDK
-      4.1.1. Tiny Numpy Engine Example
+      4.1.1. Tiny NumPy Engine Example
       4.1.2. Tiny CUDA Engine Example
       4.1.3. Medium CUDA Engine Example
+      4.1.4. Tiny OpenCL Engine Example
+      4.1.5. Medium OpenCL Engine Example
     4.2. FDK
-      4.2.1. Tiny Numpy Engine Example
+      4.2.1. Tiny NumPy Engine Example
       4.2.2. Tiny CUDA Engine Example
       4.2.3. Medium CUDA Engine Example
       4.2.4. Large CUDA Engine Example
+      4.2.5. Tiny OpenCL Engine Example
+      4.2.6. Medium OpenCL Engine Example
+      4.2.7. Large OpenCL Engine Example
     4.3. Katsevich
-      4.3.1. Tiny Numpy Engine Example
+      4.3.1. Tiny NumPy Engine Example
       4.3.2. Tiny CUDA Engine Example
       4.3.3. Medium CUDA Engine Example
       4.3.4. Large CUDA Engine Example
-      4.3.5. Tiny Numpy Engine Example Revisited
-      4.3.6. Medium CUDA Engine Example Revisited
+      4.3.5. Tiny OpenCL Engine Example
+      4.3.6. Medium OpenCL Engine Example
+      4.3.7. Large OpenCL Engine Example
+      4.3.8. Tiny NumPy Engine Example Revisited
+      4.3.9. Medium GPU Engine Example Revisited
   5. Plugins
     5.1. Load Plugins
       5.1.1. Scene File
@@ -33,6 +41,7 @@ Last updated 28-06-2013 10:58
       5.2.1. Intensity to Attenuation
     5.3. Postprocess Output
       5.3.1. Value Clipping
+      5.3.2. Hounsfield Scaling
     5.4. Save Output
       5.4.1. Raw Volume
       5.4.2. Slice Images
@@ -49,8 +58,8 @@ Last updated 28-06-2013 10:58
     10.1. ImportError cphct
     10.2. Alloc error
     10.3. Bus error
-    10.4. ImportError numpy or pycuda
-    10.5. AttributeError for numpy or pycuda
+    10.4. ImportError NumPy, PyCUDA or PyOpenCL
+    10.5. AttributeError for NumPy, PyCUDA or PyOpenCL
   11. Questions and Feedback
 
 
@@ -61,6 +70,9 @@ The Cph CT Toolbox contains a collection of applications for
 reconstructing CT images and volumes from a set of projections. This
 document describes the overall use of the toolbox applications with some
 detailed examples.
+We currently focus on the Feldkamp/Davis/Kress (FDK) and Katsevich
+filtered back projection algorithms, but plan on introducing other
+reconstruction algorithms and methods in the future.
 
 
   2. Installation
@@ -133,7 +145,7 @@ is run with -H or --help flag.
 The help output includes information about all settings in the form of
 long and short option flags and any arguments the option takes.
 
-All applications look for configuration files in a number of standard
+All applications look for optional configuration files in a number of standard
 locations. Namely APP.cfg files in ~/.cphcttoolbox and in
 the working directory in that order. Where APP is the base name of the
 actual application so that cufdk.py automatically looks for fdk.cfg and
@@ -146,6 +158,12 @@ file setting.
 
 	3.1. Center FDK
 	===============
+
+Center FDK is a fan beam reconstruction using the FDK algorithm on
+centered fan beam projections. Due to the nature of the FDK the center
+slice version belongs to the class of theoretically exact algorithms
+wheras the general FDK is an approximation even before applying the
+discretization of the implementation.
 
 We provide a single wrapper, centerfdk.py, for all the actual compute
 backends so that it is simple to switch backend engine.
@@ -169,35 +187,41 @@ Configurable settings are available in the output of:
       Detector width in cm (-1 for auto)
       Default: -1
   --proj-filter-nyquist-fraction / cfg:proj_filter_nyquist_fraction    <type 'float'>
-      FDK projection filter nyquest fraction (used when generating builtin filters)
+      FDK projection filter nyquist fraction (used when generating builtin filters)
       Default: 1.0
   --detector-column-offset / cfg:detector_column_offset    <type 'float'>
       Center ray alignment offset in pixel columns
       Default: 0.0
   --load-gpu-binary-path / cfg:load_gpu_binary_path    <type 'str'>
-      Path to load compiled CUDA kernels from
+      Path to load compiled GPU kernels from
       Default: 
   --save-gpu-kernels-path / cfg:save_gpu_kernels_path    <type 'str'>
-      Path to save runtime optimized CUDA kernels code in
+      Path to save runtime optimized GPU kernels code in
       Default: 
   --cu-postprocess-output / cfg:cu_postprocess_output    <type 'str'>
-      Apply specified cuda postprocessing to output array
+      Apply specified CUDA postprocessing to output array
       Default: 
   --temporary-directory / cfg:temporary_directory    <type 'str'>
       Prefix for all temporary file paths
-      Default: /tmp
+      Default: /var/folders/m8/5d7hd3sn6b7_nm5qfnm_3bmw0000gn/T
   --gpu-projs-only / cfg:gpu_projs_only    <type 'bool'>
       Keep partial results on the GPU - no copy to host
       Default: True
   --npy-preprocess-input / cfg:npy_preprocess_input    <type 'str'>
-      Apply specified numpy preprocessing to input array
+      Apply specified NumPy preprocessing to input array
       Default: 
   --gpu-target-filter-memory / cfg:gpu_target_filter_memory    <type 'int'>
       GPU memory in bytes to aim for with projection filter chunking
       Default: 268435456
+  --cl-preprocess-input / cfg:cl_preprocess_input    <type 'str'>
+      Apply specified OpenCL preprocessing to input array
+      Default: 
   --detector-distance / cfg:detector_distance    <type 'float'>
       Distance in cm from isocenter to detector
       Default: 3.0
+  --cl-postprocess-output / cfg:cl_postprocess_output    <type 'str'>
+      Apply specified OpenCL postprocessing to output array
+      Default: 
   --working-directory / -w / cfg:working_directory    <type 'str'>
       Prefix for all relative paths
       Default: .
@@ -209,9 +233,6 @@ Configurable settings are available in the output of:
   --proj-weight / cfg:proj_weight    <type 'str'>
       FDK projection weight, filepath or float.
       Default: 
-  --cuda-device-index / cfg:cuda_device_index    <type 'int'>
-      Which CUDA device to use: -1 for auto
-      Default: -1
   --y-min / cfg:y_min    <type 'float'>
       Field of View minimum y coordinate in cm
       Default: -1.0
@@ -222,7 +243,7 @@ Configurable settings are available in the output of:
       Field of View maximum x coordinate in cm
       Default: 1.0
   --gpu-target-threads / cfg:gpu_target_threads    <type 'int'>
-      Number of CUDA kernel threads to aim for per block
+      Number of GPU kernel threads to aim for per block
       Default: 256
   --angle-start / cfg:angle_start    <type 'float'>
       Which angle to begin from
@@ -249,20 +270,20 @@ Configurable settings are available in the output of:
       Center ray alignment offset in pixel rows
       Default: 0.0
   --load-gpu-kernels-path 
-      Path to load CUDA kernels code from
+      Path to load GPU kernels code from
   --chunk-range / cfg:chunk_range    <type 'str'>
       Select range of chunks to reconstruct
   --output-precision / cfg:output_precision    <type 'str'>
       Select output data type (precision)
       Default: float32
   --cu-preprocess-input / cfg:cu_preprocess_input    <type 'str'>
-      Apply specified cuda preprocessing to input array
+      Apply specified CUDA preprocessing to input array
       Default: 
   --proj-filter-scale / cfg:proj_filter_scale    <type 'float'>
       FDK projection filter scale (used when generating builtin filters)
       Default: -1.0
   --npy-postprocess-output / cfg:npy_postprocess_output    <type 'str'>
-      Apply specified numpy postprocessing to output array
+      Apply specified NumPy postprocessing to output array
       Default: 
   --complex-precision / cfg:complex_precision    <type 'str'>
       Select internal complex data type (precision)
@@ -277,13 +298,16 @@ Configurable settings are available in the output of:
   --engine / -E / cfg:engine    <type 'str'>
       Back end calculation engine
       Default: numpy
-      Allowed: numpy, cuda
+      Allowed: opencl, numpy, cuda
   --total-turns / cfg:total_turns    <type 'int'>
       Number of full gantry rotations (-1 for auto)
       Default: -1
   --precision / -p / cfg:precision    <type 'str'>
       Select internal data type (precision)
       Default: float32
+  --gpu-device-index / cfg:gpu_device_index    <type 'int'>
+      Which GPU device to use: -1 for auto
+      Default: -1
   --y-voxels / cfg:y_voxels    <type 'int'>
       Field of View resolution in y
       Default: 512
@@ -301,7 +325,7 @@ Configurable settings are available in the output of:
       Number of pixel columns in projections
       Default: 256
   --save-gpu-binary-path / cfg:save_gpu_binary_path    <type 'str'>
-      Path to save runtime optimized compiled CUDA kernels in
+      Path to save runtime optimized compiled GPU kernels in
       Default: 
   --detector-shape / cfg:detector_shape    <type 'str'>
       Shape of detector
@@ -325,13 +349,13 @@ Configurable settings are available in the output of:
       Field of View resolution in x
       Default: 512
   --proj-chunk-size / cfg:proj_chunk_size    <type 'int'>
-      CUDA FDK number of projections processed at a time.
+      OpenCL FDK number of projections processed at a time.
       Default: 1
   --detector-pixel-height / cfg:detector_pixel_height    <type 'float'>
       Detector pixel height in cm (-1 for auto)
       Default: -1
   --load-gpu-init-path / cfg:load_gpu_init_path    <type 'str'>
-      Path to load optional CUDA init code from
+      Path to load optional GPU init code from
       Default: 
 
 Please refer to the general FDK notes that apply here as well.
@@ -339,6 +363,12 @@ Please refer to the general FDK notes that apply here as well.
 
 	3.2. FDK
 	========
+
+FDK is a cone beam reconstruction which belongs to the class of
+approximate reconstruction algorithms and it is implemented for circular
+scan. Only the central slice can theoretically be reconstructed exactly
+with the FDK and the approximation and thus reconstruction artifacts get
+worse as the cone angle grows. 
 
 We provide a single wrapper, fdk.py, for all the actual compute
 backends so that it is simple to switch backend engine.
@@ -361,7 +391,7 @@ Configurable settings are available in the output of:
       Center ray alignment offset in pixel rows
       Default: 0.0
   --load-gpu-kernels-path 
-      Path to load CUDA kernels code from
+      Path to load GPU kernels code from
   --proj-filter / cfg:proj_filter    <type 'str'>
       Projection filter filepath or one of the builtin filters:
   	['hamming', 'ram-lak', 'shepp-logan', 'cosine', 'hann', 'skip']
@@ -375,13 +405,13 @@ Configurable settings are available in the output of:
       Select output data type (precision)
       Default: float32
   --cu-preprocess-input / cfg:cu_preprocess_input    <type 'str'>
-      Apply specified cuda preprocessing to input array
+      Apply specified CUDA preprocessing to input array
       Default: 
   --proj-filter-scale / cfg:proj_filter_scale    <type 'float'>
       FDK projection filter scale (used when generating builtin filters)
       Default: -1.0
   --npy-postprocess-output / cfg:npy_postprocess_output    <type 'str'>
-      Apply specified numpy postprocessing to output array
+      Apply specified NumPy postprocessing to output array
       Default: 
   --complex-precision / cfg:complex_precision    <type 'str'>
       Select internal complex data type (precision)
@@ -397,12 +427,12 @@ Configurable settings are available in the output of:
       Number of projections in a full gantry rotation
       Default: 360
   --proj-filter-nyquist-fraction / cfg:proj_filter_nyquist_fraction    <type 'float'>
-      FDK projection filter nyquest fraction (used when generating builtin filters)
+      FDK projection filter nyquist fraction (used when generating builtin filters)
       Default: 1.0
   --engine / -E / cfg:engine    <type 'str'>
       Back end calculation engine
       Default: numpy
-      Allowed: numpy, cuda
+      Allowed: opencl, numpy, cuda
   --total-turns / cfg:total_turns    <type 'int'>
       Number of full gantry rotations (-1 for auto)
       Default: -1
@@ -412,15 +442,15 @@ Configurable settings are available in the output of:
   --precision / -p / cfg:precision    <type 'str'>
       Select internal data type (precision)
       Default: float32
-  --save-gpu-kernels-path / cfg:save_gpu_kernels_path    <type 'str'>
-      Path to save runtime optimized CUDA kernels code in
-      Default: 
+  --gpu-device-index / cfg:gpu_device_index    <type 'int'>
+      Which GPU device to use: -1 for auto
+      Default: -1
   --cu-postprocess-output / cfg:cu_postprocess_output    <type 'str'>
-      Apply specified cuda postprocessing to output array
+      Apply specified CUDA postprocessing to output array
       Default: 
   --temporary-directory / cfg:temporary_directory    <type 'str'>
       Prefix for all temporary file paths
-      Default: /tmp
+      Default: /var/folders/m8/5d7hd3sn6b7_nm5qfnm_3bmw0000gn/T
   --y-voxels / cfg:y_voxels    <type 'int'>
       Field of View resolution in y
       Default: 512
@@ -434,7 +464,7 @@ Configurable settings are available in the output of:
       Keep partial results on the GPU - no copy to host
       Default: True
   --npy-preprocess-input / cfg:npy_preprocess_input    <type 'str'>
-      Apply specified numpy preprocessing to input array
+      Apply specified NumPy preprocessing to input array
       Default: 
   --log-format / cfg:log_format    <type 'str'>
       Log line format
@@ -446,12 +476,18 @@ Configurable settings are available in the output of:
       Default: 
   --limit-sources / cfg:limit_sources    <type 'str'>
       Limit reconstruction to given source angles
+  --cl-preprocess-input / cfg:cl_preprocess_input    <type 'str'>
+      Apply specified OpenCL preprocessing to input array
+      Default: 
   --detector-columns / cfg:detector_columns    <type 'int'>
       Number of pixel columns in projections
       Default: 256
   --detector-distance / cfg:detector_distance    <type 'float'>
       Distance in cm from isocenter to detector
       Default: 3.0
+  --cl-postprocess-output / cfg:cl_postprocess_output    <type 'str'>
+      Apply specified OpenCL postprocessing to output array
+      Default: 
   --working-directory / -w / cfg:working_directory    <type 'str'>
       Prefix for all relative paths
       Default: .
@@ -476,14 +512,11 @@ Configurable settings are available in the output of:
   --version / -V 
       Show version
   --save-gpu-binary-path / cfg:save_gpu_binary_path    <type 'str'>
-      Path to save runtime optimized compiled CUDA kernels in
+      Path to save runtime optimized compiled GPU kernels in
       Default: 
   --proj-weight / cfg:proj_weight    <type 'str'>
       FDK projection weight, filepath or float.
       Default: 
-  --cuda-device-index / cfg:cuda_device_index    <type 'int'>
-      Which CUDA device to use: -1 for auto
-      Default: -1
   --y-min / cfg:y_min    <type 'float'>
       Field of View minimum y coordinate in cm
       Default: -1.0
@@ -491,10 +524,10 @@ Configurable settings are available in the output of:
       Detector pixel width in cm (-1 for auto)
       Default: -1
   --load-gpu-binary-path / cfg:load_gpu_binary_path    <type 'str'>
-      Path to load compiled CUDA kernels from
+      Path to load compiled GPU kernels from
       Default: 
   --load-gpu-init-path / cfg:load_gpu_init_path    <type 'str'>
-      Path to load optional CUDA init code from
+      Path to load optional GPU init code from
       Default: 
   --z-min / cfg:z_min    <type 'float'>
       Field of View minimum z coordinate in cm
@@ -515,13 +548,13 @@ Configurable settings are available in the output of:
       Field of View resolution in x
       Default: 512
   --gpu-target-threads / cfg:gpu_target_threads    <type 'int'>
-      Number of CUDA kernel threads to aim for per block
+      Number of GPU kernel threads to aim for per block
       Default: 256
   --angle-start / cfg:angle_start    <type 'float'>
       Which angle to begin from
       Default: 0.0
   --proj-chunk-size / cfg:proj_chunk_size    <type 'int'>
-      CUDA FDK number of projections processed at a time.
+      OpenCL FDK number of projections processed at a time.
       Default: 1
   --checksum / cfg:checksum    <type 'int'>
       Level of checksums to enable
@@ -529,6 +562,9 @@ Configurable settings are available in the output of:
   --y-max / cfg:y_max    <type 'float'>
       Field of View maximum y coordinate in cm
       Default: 1.0
+  --save-gpu-kernels-path / cfg:save_gpu_kernels_path    <type 'str'>
+      Path to save runtime optimized GPU kernels code in
+      Default: 
   --detector-pixel-height / cfg:detector_pixel_height    <type 'float'>
       Detector pixel height in cm (-1 for auto)
       Default: -1
@@ -547,6 +583,9 @@ to filtered back projection literature for details.
 
 	3.3. Katsevich
 	==============
+
+Katsevich belongs to the class of theoretically exact cone beam
+reconstruction algorithms and it is implemented for spiral scans.
 
 We provide a single wrapper, katsevich.py, for all the actual compute
 backends so that it is simple to switch backend engine.
@@ -569,7 +608,11 @@ Configurable settings are available in the output of:
       Center ray alignment offset in pixel rows
       Default: 0.0
   --load-gpu-kernels-path 
-      Path to load CUDA kernels code from
+      Path to load GPU kernels code from
+  --proj-filter / cfg:proj_filter    <type 'str'>
+      Projection filter filepath or one of the builtin filters:
+  	['dhilbert', 'skip']
+      Default: dhilbert
   --chunk-range / cfg:chunk_range    <type 'str'>
       Select range of chunks to reconstruct
   --z-voxels / cfg:z_voxels    <type 'int'>
@@ -579,10 +622,10 @@ Configurable settings are available in the output of:
       Select output data type (precision)
       Default: float32
   --cu-preprocess-input / cfg:cu_preprocess_input    <type 'str'>
-      Apply specified cuda preprocessing to input array
+      Apply specified CUDA preprocessing to input array
       Default: 
   --npy-postprocess-output / cfg:npy_postprocess_output    <type 'str'>
-      Apply specified numpy postprocessing to output array
+      Apply specified NumPy postprocessing to output array
       Default: 
   --complex-precision / cfg:complex_precision    <type 'str'>
       Select internal complex data type (precision)
@@ -600,7 +643,7 @@ Configurable settings are available in the output of:
   --engine / -E / cfg:engine    <type 'str'>
       Back end calculation engine
       Default: numpy
-      Allowed: numpy, cuda
+      Allowed: opencl, numpy, cuda
   --total-turns / cfg:total_turns    <type 'int'>
       Number of full gantry rotations (-1 for auto)
       Default: -1
@@ -610,15 +653,15 @@ Configurable settings are available in the output of:
   --precision / -p / cfg:precision    <type 'str'>
       Select internal data type (precision)
       Default: float32
-  --save-gpu-kernels-path / cfg:save_gpu_kernels_path    <type 'str'>
-      Path to save runtime optimized CUDA kernels code in
-      Default: 
+  --gpu-device-index / cfg:gpu_device_index    <type 'int'>
+      Which GPU device to use: -1 for auto
+      Default: -1
   --cu-postprocess-output / cfg:cu_postprocess_output    <type 'str'>
-      Apply specified cuda postprocessing to output array
+      Apply specified CUDA postprocessing to output array
       Default: 
   --temporary-directory / cfg:temporary_directory    <type 'str'>
       Prefix for all temporary file paths
-      Default: /tmp
+      Default: /var/folders/m8/5d7hd3sn6b7_nm5qfnm_3bmw0000gn/T
   --y-voxels / cfg:y_voxels    <type 'int'>
       Field of View resolution in y
       Default: 512
@@ -632,7 +675,7 @@ Configurable settings are available in the output of:
       Keep partial results on the GPU - no copy to host
       Default: True
   --npy-preprocess-input / cfg:npy_preprocess_input    <type 'str'>
-      Apply specified numpy preprocessing to input array
+      Apply specified NumPy preprocessing to input array
       Default: 
   --log-format / cfg:log_format    <type 'str'>
       Log line format
@@ -677,11 +720,8 @@ Configurable settings are available in the output of:
   --version / -V 
       Show version
   --save-gpu-binary-path / cfg:save_gpu_binary_path    <type 'str'>
-      Path to save runtime optimized compiled CUDA kernels in
+      Path to save runtime optimized compiled GPU kernels in
       Default: 
-  --cuda-device-index / cfg:cuda_device_index    <type 'int'>
-      Which CUDA device to use: -1 for auto
-      Default: -1
   --y-min / cfg:y_min    <type 'float'>
       Field of View minimum y coordinate in cm
       Default: -1.0
@@ -689,10 +729,10 @@ Configurable settings are available in the output of:
       Detector pixel width in cm (-1 for auto)
       Default: -1
   --load-gpu-binary-path / cfg:load_gpu_binary_path    <type 'str'>
-      Path to load compiled CUDA kernels from
+      Path to load compiled GPU kernels from
       Default: 
   --load-gpu-init-path / cfg:load_gpu_init_path    <type 'str'>
-      Path to load optional CUDA init code from
+      Path to load optional GPU init code from
       Default: 
   --z-min / cfg:z_min    <type 'float'>
       Field of View minimum z coordinate in cm
@@ -710,7 +750,7 @@ Configurable settings are available in the output of:
       Field of View resolution in x
       Default: 512
   --gpu-target-threads / cfg:gpu_target_threads    <type 'int'>
-      Number of CUDA kernel threads to aim for per block
+      Number of GPU kernel threads to aim for per block
       Default: 256
   --angle-start / cfg:angle_start    <type 'float'>
       Which angle to begin from
@@ -721,6 +761,9 @@ Configurable settings are available in the output of:
   --y-max / cfg:y_max    <type 'float'>
       Field of View maximum y coordinate in cm
       Default: 1.0
+  --save-gpu-kernels-path / cfg:save_gpu_kernels_path    <type 'str'>
+      Path to save runtime optimized GPU kernels code in
+      Default: 
   --detector-pixel-height / cfg:detector_pixel_height    <type 'float'>
       Detector pixel height in cm (-1 for auto)
       Default: -1
@@ -761,7 +804,7 @@ PATH environment.
 	===============
 
 
-		4.1.1. Tiny Numpy Engine Example
+		4.1.1. Tiny NumPy Engine Example
 		================================
 
 Download and unpack e.g. the circular 1x32 example from our project
@@ -785,7 +828,7 @@ sample and produce output like
   2012-10-02 16:03:33,555 INFO Complete time used 1.092s
 
 and save result images in
-circular/shepp-logan-1x32/output-1x32-32x32x1-auto/
+circular/shepp-logan-1x32/output-1x32-32x32x1-auto/ .
 In this case the configuration creates just a single z slice and it
 should finish in reasonable time (minutes) even on limited machines.
 
@@ -796,10 +839,10 @@ should finish in reasonable time (minutes) even on limited machines.
 To try out the CUDA version instead use the same downloaded example and
 simply change the engine flag:
 
-  centerfdk.py --engine=cuda \
-      circular/shepp-logan-1x32/shepp-logan-1x32-float32-32x32x1-auto.cfg
+  centerfdk.py --engine=cuda circular/shepp-logan-1x32/\
+  shepp-logan-1x32-float32-32x32x1-auto.cfg
 
-If you have a working CUDA and pycuda installation it should yield the
+If you have a working CUDA and PyCUDA installation it should yield the
 same reconstructed results in the output directory but at a much faster pace.
 
 
@@ -813,10 +856,40 @@ https://cphcttoolbox.googlecode.com/files/circular-shepp-logan-1x128.zip
 
 Then run it with
 
-  centerfdk.py --engine=cuda \
-      circular/shepp-logan-1x128/shepp-logan-1x128-float32-128x128x1-auto.cfg
+  centerfdk.py --engine=cuda circular/shepp-logan-1x128/\
+  shepp-logan-1x128-float32-128x128x1-auto.cfg
 
-If you have a working CUDA and pycuda installation it should yield the
+If you have a working CUDA and PyCUDA installation it should yield the
+same reconstructed results in the output directory but at a much faster pace.
+
+
+		4.1.4. Tiny OpenCL Engine Example
+		=================================
+
+To try out the OpenCL version instead use the same downloaded example and
+simply change the engine flag:
+
+  centerfdk.py --engine=opencl circular/shepp-logan-1x32/\
+  shepp-logan-1x32-float32-32x32x1-auto.cfg
+
+If you have a working OpenCL and PyOpenCL installation it should yield the
+same reconstructed results in the output directory but at a much faster pace.
+
+
+		4.1.5. Medium OpenCL Engine Example
+		===================================
+
+To try out the OpenCL version on a bigger example instead download and
+unpack the example from:
+
+https://cphcttoolbox.googlecode.com/files/circular-shepp-logan-1x128.zip 
+
+Then run it with
+
+  centerfdk.py --engine=opencl circular/shepp-logan-1x128/\
+  shepp-logan-1x128-float32-128x128x1-auto.cfg
+
+If you have a working OpenCL and PyOpenCL installation it should yield the
 same reconstructed results in the output directory but at a much faster pace.
 
 
@@ -824,7 +897,7 @@ same reconstructed results in the output directory but at a much faster pace.
 	========
 
 
-		4.2.1. Tiny Numpy Engine Example
+		4.2.1. Tiny NumPy Engine Example
 		================================
 
 Download and unpack e.g. the circular 8x32 example from our project
@@ -835,8 +908,8 @@ https://cphcttoolbox.googlecode.com/files/circular-shepp-logan-8x32.zip
 Then execute the FDK application with the numpy engine from the
 directory where you unpacked the example.
 
-  fdk.py --engine=numpy \
-      circular/shepp-logan-8x32/shepp-logan-8x32-float32-32x32x32-auto-single.cfg
+  fdk.py --engine=numpy circular/shepp-logan-8x32/\
+  shepp-logan-8x32-float32-32x32x32-auto-single.cfg
 
 This will run the default numpy FDK reconstruction on a tiny
 sample and produce output like
@@ -848,15 +921,15 @@ sample and produce output like
   2012-09-21 15:27:31,359 INFO Complete time used 2.150s
 
 and save result images in
-circular/shepp-logan-8x32/output-8x32-32x32x32-auto-single/
+circular/shepp-logan-8x32/output-8x32-32x32x32-auto-single/ .
 In this case the configuration creates just a single z chunk of two
 slices to finish in reasonable time (minutes) even on limited machines.
 
 It should only take slightly longer to reconstruct the entire volume
 with the other configuration file:
 
-  fdk.py --engine=numpy \
-      circular/shepp-logan-8x32/shepp-logan-8x32-float32-32x32x32-auto.cfg
+  fdk.py --engine=numpy circular/shepp-logan-8x32/\
+  shepp-logan-8x32-float32-32x32x32-auto.cfg
 
 
 		4.2.2. Tiny CUDA Engine Example
@@ -865,16 +938,16 @@ with the other configuration file:
 To try out the CUDA version instead use the same downloaded example and
 simply change the engine flag:
 
-  fdk.py --engine=cuda \
-      circular/shepp-logan-8x32/shepp-logan-8x32-float32-32x32x32-auto-single.cfg
+  fdk.py --engine=cuda circular/shepp-logan-8x32/\
+  shepp-logan-8x32-float32-32x32x32-auto-single.cfg
 
-If you have a working CUDA and pycuda installation it should yield the
+If you have a working CUDA and PyCUDA installation it should yield the
 same reconstructed results in the output directory but at a much faster pace.
 
 Again you can quickly reconstruct the entire volume as well:
 
-  fdk.py --engine=cuda \
-      circular/shepp-logan-8x32/shepp-logan-8x32-float32-32x32x32-auto.cfg
+  fdk.py --engine=cuda circular/shepp-logan-8x32/\
+  shepp-logan-8x32-float32-32x32x32-auto.cfg
 
 
 		4.2.3. Medium CUDA Engine Example
@@ -887,10 +960,10 @@ https://cphcttoolbox.googlecode.com/files/circular-shepp-logan-32x128.zip
 
 Then run it with
 
-  fdk.py --engine=cuda \
-      circular/shepp-logan-32x128/shepp-logan-32x128-float32-128x128x128-auto.cfg
+  fdk.py --engine=cuda circular/shepp-logan-32x128/\
+  shepp-logan-32x128-float32-128x128x128-auto.cfg
 
-If you have a working CUDA and pycuda installation it should yield the
+If you have a working CUDA and PyCUDA installation it should yield the
 same reconstructed results in the output directory but at a much faster pace.
 
 
@@ -904,10 +977,62 @@ https://cphcttoolbox.googlecode.com/files/circular-shepp-logan-128x512.zip
 
 Then run it with
 
-  fdk.py --engine=cuda \
-      circular/shepp-logan-128x512/shepp-logan-128x512-float32-512x512x512-auto.cfg
+  fdk.py --engine=cuda circular/shepp-logan-128x512/\
+  shepp-logan-128x512-float32-512x512x512-auto.cfg
 
-If you have a working CUDA and pycuda installation it should yield the
+If you have a working CUDA and PyCUDA installation it should yield the
+same reconstructed results in the output directory but at a much faster pace.
+
+
+		4.2.5. Tiny OpenCL Engine Example
+		=================================
+
+To try out the OpenCL version instead use the same downloaded example and
+simply change the engine flag:
+
+  fdk.py --engine=opencl circular/shepp-logan-8x32/\
+  shepp-logan-8x32-float32-32x32x32-auto-single.cfg
+
+If you have a working OpenCL and PyOpenCL installation it should yield the
+same reconstructed results in the output directory but at a much faster pace.
+
+Again you can quickly reconstruct the entire volume as well:
+
+  fdk.py --engine=opencl circular/shepp-logan-8x32/\
+  shepp-logan-8x32-float32-32x32x32-auto.cfg
+
+
+		4.2.6. Medium OpenCL Engine Example
+		===================================
+
+To try out the OpenCL version on a bigger example instead download and
+unpack the example from:
+
+https://cphcttoolbox.googlecode.com/files/circular-shepp-logan-32x128.zip 
+
+Then run it with
+
+  fdk.py --engine=opencl circular/shepp-logan-32x128/\
+  shepp-logan-32x128-float32-128x128x128-auto.cfg
+
+If you have a working OpenCL and PyOpenCL installation it should yield the
+same reconstructed results in the output directory but at a much faster pace.
+
+
+		4.2.7. Large OpenCL Engine Example
+		==================================
+
+To try out the OpenCL version on a large example instead download and
+unpack the example from:
+
+https://cphcttoolbox.googlecode.com/files/circular-shepp-logan-128x512.zip 
+
+Then run it with
+
+  fdk.py --engine=opecl circular/shepp-logan-128x512/\
+  shepp-logan-128x512-float32-512x512x512-auto.cfg
+
+If you have a working OpenCL and PyOpenCL installation it should yield the
 same reconstructed results in the output directory but at a much faster pace.
 
 
@@ -915,7 +1040,7 @@ same reconstructed results in the output directory but at a much faster pace.
 	==============
 
 
-		4.3.1. Tiny Numpy Engine Example
+		4.3.1. Tiny NumPy Engine Example
 		================================
 
 Download and unpack e.g. the tiny example from our project
@@ -926,8 +1051,8 @@ https://cphcttoolbox.googlecode.com/files/spiral-shepp-logan-8x32.zip
 Then execute the Katsevich application with the numpy engine from the
 directory where you unpacked the example.
 
-  katsevich.py --engine=numpy \
-      spiral/shepp-logan-8x32/shepp-logan-8x32-float32-32x32x32-auto-0.5-rebin-16-single.cfg
+  katsevich.py --engine=numpy spiral/shepp-logan-8x32/\
+  shepp-logan-8x32-float32-32x32x32-auto-0.5-rebin-16-single.cfg
 
 This will run the default numpy Katsevich reconstruction on a tiny
 sample and produce output like
@@ -939,7 +1064,7 @@ sample and produce output like
   2012-09-06 10:06:37,888 INFO Complete time used 123.606s
 
 and save result images in
-spiral/shepp-logan-8x32/output-8x32-32x32x32-auto-0.500-rebin-16-single/
+spiral/shepp-logan-8x32/output-8x32-32x32x32-auto-0.500-rebin-16-single/ .
 In this case the configuration creates just a single z chunk of two
 slices to finish in reasonable time (minutes) even on limited machines.
 
@@ -950,10 +1075,10 @@ slices to finish in reasonable time (minutes) even on limited machines.
 To try out the CUDA version instead use the same downloaded example and
 simply change the engine flag:
 
-  katsevich.py --engine=cuda \
-      spiral/shepp-logan-8x32/shepp-logan-8x32-float32-32x32x32-auto-0.5-rebin-16-single.cfg
+  katsevich.py --engine=cuda spiral/shepp-logan-8x32/\
+  shepp-logan-8x32-float32-32x32x32-auto-0.5-rebin-16-single.cfg
 
-If you have a working CUDA and pycuda installation it should yield the
+If you have a working CUDA and PyCUDA installation it should yield the
 same reconstructed results in the output directory but at a much faster pace.
 
 
@@ -967,10 +1092,10 @@ https://cphcttoolbox.googlecode.com/files/spiral-shepp-logan-32x128.zip
 
 Then run it with
 
-  katsevich.py --engine=cuda \
-      spiral/shepp-logan-32x128/shepp-logan-32x128-float32-128x128x128-auto-0.5-rebin-64.cfg
+  katsevich.py --engine=cuda spiral/shepp-logan-32x128/\
+  shepp-logan-32x128-float32-128x128x128-auto-0.5-rebin-64.cfg
 
-If you have a working CUDA and pycuda installation it should yield the
+If you have a working CUDA and PyCUDA installation it should yield the
 same reconstructed results in the output directory but at a much faster pace.
 
 
@@ -984,14 +1109,62 @@ https://cphcttoolbox.googlecode.com/files/spiral-shepp-logan-128x512.zip
 
 Then run it with
 
-  katsevich.py --engine=cuda \
-      spiral/shepp-logan-128x512/shepp-logan-128x512-float32-512x512x512-auto-0.5-rebin-256.cfg
+  katsevich.py --engine=cuda spiral/shepp-logan-128x512/\
+  shepp-logan-128x512-float32-512x512x512-auto-0.5-rebin-256.cfg
 
-If you have a working CUDA and pycuda installation it should yield the
+If you have a working CUDA and PyCUDA installation it should yield the
 same reconstructed results in the output directory but at a much faster pace.
 
 
-		4.3.5. Tiny Numpy Engine Example Revisited
+		4.3.5. Tiny OpenCL Engine Example
+		=================================
+
+To try out the OpenCL version instead use the same downloaded example and
+simply change the engine flag:
+
+  katsevich.py --engine=opencl spiral/shepp-logan-8x32/\
+  shepp-logan-8x32-float32-32x32x32-auto-0.5-rebin-16-single.cfg
+
+If you have a working OpenCL and PyOpenCL installation it should yield the
+same reconstructed results in the output directory but at a much faster pace.
+
+
+		4.3.6. Medium OpenCL Engine Example
+		===================================
+
+To try out the OpenCL version on a bigger example instead download and
+unpack the example from:
+
+https://cphcttoolbox.googlecode.com/files/spiral-shepp-logan-32x128.zip 
+
+:1
+Then run it with
+
+  katsevich.py --engine=opencl spiral/shepp-logan-32x128/\
+  shepp-logan-32x128-float32-128x128x128-auto-0.5-rebin-64.cfg
+
+If you have a working OpenCL and PyOpenCL installation it should yield the
+same reconstructed results in the output directory but at a much faster pace.
+
+
+		4.3.7. Large OpenCL Engine Example
+		==================================
+
+To try out the OpenCL version on a large example instead download and
+unpack the example from:
+
+https://cphcttoolbox.googlecode.com/files/spiral-shepp-logan-128x512.zip 
+
+Then run it with
+
+  katsevich.py --engine=opencl spiral/shepp-logan-128x512/\
+  shepp-logan-128x512-float32-512x512x512-auto-0.5-rebin-256.cfg
+
+If you have a working OpenCL and PyOpenCL installation it should yield the
+same reconstructed results in the output directory but at a much faster pace.
+
+
+		4.3.8. Tiny NumPy Engine Example Revisited
 		==========================================
 
 Lets take another look at the numpy reconstruction example above to get an
@@ -1040,11 +1213,12 @@ which you can inspect in your favorite image viewer.
 The resolution is not that high so the images will be of modest quality
 even though we used high precision for the calculations.
 Please note that we do not currently support float64 precision in the
-cuda engine, so replacing numpy with cuda in the example above will fail.
+GPU engines, so replacing numpy with cuda or opencl in the example above
+will fail.
 
 
-		4.3.6. Medium CUDA Engine Example Revisited
-		===========================================
+		4.3.9. Medium GPU Engine Example Revisited
+		==========================================
 
 Lets rerun the medium sized reconstruction example but with different settings.
 We use sample Shepp-Logan projections in float32 format for a curved 32x128
@@ -1059,7 +1233,7 @@ between performance and quality for most GPUs. Finally we decide to
 handle chunks of 16 z-slices at a time and save images of these chunks
 concatenated in a file.
 
-  katsevich.py --engine cuda \
+  katsevich.py --engine=opencl \
       --npy_load_input=loadscene#spiral/shepp-logan-32x128/\
   input-32x128-auto-float32/\
   raw-scene_1801_32_128_0.500_1.000-3.000_2.000_2.000_2.000_float32.csv \
@@ -1081,7 +1255,7 @@ details including timing values
   2012-09-21 12:03:43,546 INFO Complete time used 41.583s
 
 and save result images in
-spiral/shepp-logan-32x128/output-32x128-512x512x512-auto-0.5-rebin-64-single/
+spiral/shepp-logan-32x128/output-32x128-512x512x512-auto-0.5-rebin-64-single/ .
 which you can inspect in your favorite image viewer.
 The lower calculation precision typically does not hurt the quality of
 the output much.
@@ -1154,8 +1328,8 @@ hardware like GPUs before the main calculations, so those engine plugins
 work on the data directly on the device, whereas the numpy plugins work on the
 data before it is moved to the device and after it is moved back from
 there.
-The general plugin order is outlined below with the Numpy CPU plugins
-and CUDA GPU plugin hooks. For the non-GPU versions the GPU
+The general plugin order is outlined below with the NumPy CPU plugins
+and CUDA/OpenCL GPU plugin hooks. For the non-GPU versions the GPU
 pre-/post-preprocessing is simply skipped. 
 
 [figures/scaled/app-chunk-flow-snake.png]
@@ -1165,9 +1339,11 @@ plugins are called as shown above but repeated for each chunk.
 
 Numpy plugins work on standard ndarrays
  (http://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.html)
-and CUDA plugins work on the very similar GPUArray
+while CUDA and OpenCL plugins work on the very similar GPUArray
  (http://documen.tician.de/pycuda/array.html#the-gpuarray-array-class)
-abstraction.
+and Array
+ (http://documen.tician.de/pyopencl/array.html#the-array-class)
+abstraction respectively.
 
 
 	5.1. Load Plugins
@@ -1252,6 +1428,23 @@ air.bin is a single scan without anything in the scan region. Both files
 should be binary encoded with the same data type as the scan input,
 i.e. uint16 in this case.
 
+In case you have a CUDA or OpenCL capable device and use one of those
+optimized engines for your reconstruction, you may experience better
+performance by switching to the corresponding cu or cl preprocessing
+directly on the device. That is, replace the numpy flux2proj plugin:
+
+  --npy-preprocess-input=flux2proj#0#65535
+
+with the CUDA engine one:
+
+  --cu-preprocess-input=flux2proj#0#65535
+
+or with the OpenCL one:
+
+  --cl-preprocess-input=flux2proj#0#65535
+
+depending on the engine used for the reconstruction.
+
 
 	5.3. Postprocess Output
 	=======================
@@ -1279,6 +1472,25 @@ zero with something like:
   --npy-postprocess-output=clip#0#10000
 
 
+		5.3.2. Hounsfield Scaling
+		=========================
+
+The hounsfield plugin scales the computed voxel values to the hounsfield
+scale based on a measured attenuation value for water. This is useful to
+get comparable results between scans. The numpy version is called like:
+
+  --npy-postprocess-output=hounsfield#942
+
+and again you may want to keep the scaling on the engine you happen to
+use. If using a CUDA based reconstruction:
+
+  --cu-postprocess-output=hounsfield#942
+
+or if using an OpenCL based reconstruction:
+
+  --cl-postprocess-output=hounsfield#942
+
+
 	5.4. Save Output
 	================
 
@@ -1294,8 +1506,9 @@ individually or in combination with basic plugin chaining.
 		=================
 
 Use the savevolume plugin to dump the entire reconstructed volume to
-a single binary file. Then it can be loaded into e.g. ImageJ  (http://rsb.info.nih.gov/ij/) or be
-manually further processed with numpy/python scripts:
+a single binary file. Then it can be loaded into e.g. ImageJ
+ (http://rsb.info.nih.gov/ij/) or be manually further processed with
+numpy/python scripts:
 
   --npy-save-output=savevolume#PATH/TO/VOLUME.bin
 
@@ -1307,13 +1520,13 @@ For more human friendly output it may be convenient to use the
 saveslices or savestacked plugins. They are both called with a
 volume slice dimension (x, y or z) and a file path pattern.
 
-  --npy-save-output=saveslice#DIM#SLICEPATHPATTERN
+  --npy-save-output=saveslices#DIM#SLICEPATHPATTERN
 
   --npy-save-output=savestacked#DIM#STACKPATHPATTERN[#STACKSIZE]
 
 Actual examples could be:
 
-  --npy-save-output=saveslice#z#img/z-slice-%d.png
+  --npy-save-output=saveslices#z#img/z-slice-%d.png
 
 to save individual z slices in the img subdirectory with filenames
 z-slice-0.png and so on.
@@ -1513,12 +1726,12 @@ to the right. Please refer to figure below for full axis details.
 	====================
 
 The detector offset is used to compensate for situations where the
-detector is misaligned so that the center ray does not actually hit the center of
-the detector as it should. Using the figure from the Scanner Setup section a positive
-row offset means that the detector is really located above the expected
-position (i.e. it sees the object earlier than it should). Using the
-same figure a positive column offset means that the detector is located
-to the right of the expected position.
+detector is misaligned so that the center ray does not actually hit the
+center of the detector as it should. Using the figure from the Scanner
+Setup section a positive row offset means that the detector is really
+located above the expected position (i.e. it sees the object earlier
+than it should). Using the same figure a positive column offset means
+that the detector is located to the right of the expected position.
 Negative offsets similarly mean that the detector is actually below and
 left of the expected position.
 Obviously the directions described here are reversed if one instead
@@ -1579,29 +1792,31 @@ The disk containing your temporary directory is probably full, try
  setting the temporary directory to a disk with sufficient free space.
 
 
-	10.4. ImportError numpy or pycuda
-	=================================
+	10.4. ImportError NumPy, PyCUDA or PyOpenCL
+	===========================================
 
- - If you get an ImportError for the numpy or pycuda module when running
- the tools.
+ - If you get an ImportError for the numpy, pycuda or pyopencl module
+ when running the tools.
 
-You probably don't have numpy or pycuda properly installed. Please refer
-to the references for install instructions.
+You probably don't have numpy, pycuda or pyopencl properly
+installed. Please refer to the references for install instructions.
 
 
-	10.5. AttributeError for numpy or pycuda
-	========================================
+	10.5. AttributeError for NumPy, PyCUDA or PyOpenCL
+	==================================================
 
- - If you get an AttributeError for the numpy or pycuda module when
- running the tools. 
+ - If you get an AttributeError for the numpy, pycuda or pyopencl module
+ when running the tools. 
 
-You probably don't have a recent enough numpy or pycuda version to
-support the required helper functions. Please refer
-to our requirements and to the references for install/upgrade instructions.
+You probably don't have a recent enough numpy, pycuda or pyopencl
+version to support the required helper functions. Please refer to our
+requirements and to the references for install/upgrade instructions.
 
 
   11. Questions and Feedback
   ==========================
 
-Feel free to contact us  (The contact information is available in the README and on the project page online) with your questions and feedback.
+Feel free to contact us 
+ (contact information is in the README and on the project web page)
+ with your questions and feedback. 
 

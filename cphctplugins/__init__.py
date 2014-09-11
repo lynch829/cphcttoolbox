@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # __init__ - shared plugin init
-# Copyright (C) 2012-2013  The Cph CT Toolbox Project lead by Brian Vinter
+# Copyright (C) 2012-2014  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -35,4 +35,4 @@ from incorrectly moving following comments above module doc string'''
 
 # All sub modules to load in case of 'from X import *'
 
-__all__ = ['cu', 'npy', 'ocl']
+__all__ = ['cu', 'npy', 'cl']

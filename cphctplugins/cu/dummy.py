@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# dummy - dummy cuda plugin to illustrate plugin functionality
-# Copyright (C) 2012  The Cph CT Toolbox Project lead by Brian Vinter
+# dummy - dummy CUDA plugin to illustrate plugin functionality
+# Copyright (C) 2012-2014  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -27,7 +27,7 @@
 # -- END_HEADER ---
 #
 
-"""Simple dummy cuda plugin that may be used as a template for developing your
+"""Simple dummy CUDA plugin that may be used as a template for developing your
 own plugins for input and output processing.
 
 General plugin function structure is:
@@ -68,7 +68,7 @@ def plugin_init(conf, *args, **kwargs):
     """
 
     __plugin_state__['name'] = __name__
-    logging.debug('in dummy cuda plugin init')
+    logging.debug('in dummy CUDA plugin init')
 
 
 def plugin_exit(conf, *args, **kwargs):
@@ -88,7 +88,7 @@ def plugin_exit(conf, *args, **kwargs):
     """
 
     __plugin_state__.clear()
-    logging.debug('in dummy cuda plugin exit')
+    logging.debug('in dummy CUDA plugin exit')
 
 
 def load_input(
@@ -98,7 +98,7 @@ def load_input(
     *args,
     **kwargs
     ):
-    """Dummy cuda load function to use as a custom plugin sample
+    """Dummy CUDA load function to use as a custom plugin sample
 
     Parameters
     ----------
@@ -119,7 +119,7 @@ def load_input(
         Returns a tuple of the same data array and meta list.
     """
 
-    logging.debug('in dummy cuda plugin loading')
+    logging.debug('in dummy CUDA plugin loading')
     logging.debug('''state: %s
 args: %s
 kwargs: %s''' % (__plugin_state__,
@@ -134,7 +134,7 @@ def preprocess_input(
     *args,
     **kwargs
     ):
-    """Dummy cuda preprocessing function to use as a custom plugin sample
+    """Dummy CUDA preprocessing function to use as a custom plugin sample
 
     Parameters
     ----------
@@ -155,7 +155,7 @@ def preprocess_input(
         Returns a tuple of the same data array and meta list.
     """
 
-    logging.debug(':in dummy cuda plugin preprocessing')
+    logging.debug(':in dummy CUDA plugin preprocessing')
     logging.debug('''state: %s
 args: %s
 kwargs: %s''' % (__plugin_state__,
@@ -170,7 +170,7 @@ def postprocess_output(
     *args,
     **kwargs
     ):
-    """Dummy cuda postprocessing function to use as a custom plugin sample
+    """Dummy CUDA postprocessing function to use as a custom plugin sample
 
     Parameters
     ----------
@@ -191,7 +191,7 @@ def postprocess_output(
         Returns a tuple of the same data array and meta list.
     """
 
-    logging.debug('in dummy cuda plugin postprocessing')
+    logging.debug('in dummy CUDA plugin postprocessing')
     logging.debug('''state: %s
 args: %s
 kwargs: %s''' % (__plugin_state__,
@@ -206,7 +206,7 @@ def save_output(
     *args,
     **kwargs
     ):
-    """Dummy cuda save function to use as a custom plugin sample
+    """Dummy CUDA save function to use as a custom plugin sample
 
     Parameters
     ----------
@@ -227,7 +227,7 @@ def save_output(
         Returns a tuple of the same data array and meta list.
     """
 
-    logging.debug('in dummy cuda plugin saving')
+    logging.debug('in dummy CUDA plugin saving')
     logging.debug('''state: %s
 args: %s
 kwargs: %s''' % (__plugin_state__,

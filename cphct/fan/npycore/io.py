@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# io - numpy core specific input/ouput helpers
-# Copyright (C) 2011-2012  The Cph CT Toolbox Project lead by Brian Vinter
+# io - NumPy core specific input/ouput helpers
+# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -27,16 +27,15 @@
 # -- END_HEADER ---
 #
 
-"""Numpy core specific input/output helper functions"""
+"""NumPy core specific input/output helper functions"""
 
 from cphct.fan.io import fill_fan_conf
-from cphct.npycore import allowed_data_types
 
 
 def fill_fan_npycore_conf(conf):
     """Remaining configuration after handling command line options.
     Casts all floating point results using float data type from conf.
-    This version is for the shared numpy core.
+    This version is for the shared NumPy core.
 
     Parameters
     ----------
@@ -46,7 +45,7 @@ def fill_fan_npycore_conf(conf):
     Returns
     -------
     output : dict
-        Returns configuration dictionary filled with numpy core settings.
+        Returns configuration dictionary filled with NumPy core settings.
     """
 
     fill_fan_conf(conf)

@@ -4,7 +4,7 @@
 #
 # --- BEGIN_HEADER ---
 #
-# io - numpy core specific input/ouput helpers
+# io - NumPy core specific input/ouput helpers
 # Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
@@ -27,7 +27,7 @@
 # -- END_HEADER ---
 #
 
-"""Numpy core specific input/output helper functions"""
+"""NumPy core specific input/output helper functions"""
 
 import os
 
@@ -177,7 +177,7 @@ def __set_proj_filter_array(conf, fdt):
                 msg = 'Invalid projection filter file: \'%s\' ' \
                     % proj_filter_path
                 raise ValueError(msg)
-        elif conf['proj_filter'] in supported_proj_filters:
+        elif conf['proj_filter'] in supported_proj_filters("fdk"):
             __update_proj_filter_width(conf)
             proj_filter_array = generate_proj_filter(conf['proj_filter'
                     ], conf['proj_filter_width'],
@@ -187,7 +187,7 @@ def __set_proj_filter_array(conf, fdt):
             msg = 'proj_filter: \'%s\' is neither a filepath ' \
                 % conf['proj_filter'] \
                 + 'nor in allowed projection filters: %s' \
-                % supported_proj_filters
+                % supported_proj_filters("fdk")
             raise ValueError(msg)
 
         if conf['proj_filter_width'] < conf['detector_columns']:
@@ -270,7 +270,7 @@ def __set_volume_weight_matrix(conf, fdt):
 def fill_fdk_npycore_conf(conf):
     """Remaining configuration after handling command line options.
     Casts all floating point results using float data type from conf.
-    This version is for the shared numpy core.
+    This version is for the shared NumPy core.
 
     Parameters
     ----------
@@ -280,7 +280,7 @@ def fill_fdk_npycore_conf(conf):
     Returns
     -------
     output : dict
-        Returns configuration dictionary filled with numpy core settings.
+        Returns configuration dictionary filled with NumPy core settings.
     """
 
     fill_fdk_conf(conf)

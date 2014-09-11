@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# conf - shared fdk configuration helpers
-# Copyright (C) 2011-2012  The Cph CT Toolbox Project lead by Brian Vinter
+# conf - Shared FDK configuration helpers
+# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -37,7 +37,6 @@ from incorrectly moving following comments above module doc string'''
 # parent module
 
 from cphct.cone.conf import *
-from cphct.io import path_expander
 from cphct.npycore.utils import supported_proj_filters
 
 # Valid values for string options:
@@ -63,7 +62,7 @@ def _shared_opts():
             'default': 'hamming',
             'description': 'Projection filter filepath ' \
                 + 'or one of the builtin filters:\n\t%s' \
-                % supported_proj_filters,
+                % supported_proj_filters("fdk"),
             },
         'proj_filter_width': {
             'long': 'proj-filter-width',
@@ -89,7 +88,7 @@ def _shared_opts():
             'args': float,
             'handler': float_value,
             'default': 1.0,
-            'description': 'FDK projection filter nyquest fraction ' \
+            'description': 'FDK projection filter nyquist fraction ' \
                 + '(used when generating builtin filters)',
             },
         'proj_weight': {
@@ -115,12 +114,12 @@ def _shared_opts():
 
 
 def _npy_opts():
-    """FDK options for numpy engine
+    """FDK options for NumPy engine
 
     Returns
     -------
     output : dict
-        Returns a dictionary of numpy specific options helper dictionaries.
+        Returns a dictionary of NumPy specific options helper dictionaries.
     """
 
     opts = {}
@@ -128,12 +127,12 @@ def _npy_opts():
 
 
 def _cu_opts():
-    """FDK options for cuda engine
+    """FDK options for CUDA engine
 
     Returns
     -------
     output : dict
-        Returns a dictionary of cuda specific options helper dictionaries.
+        Returns a dictionary of CUDA specific options helper dictionaries.
     """
 
     opts = {
@@ -144,6 +143,28 @@ def _cu_opts():
         'handler': int_value,
         'default': 1,
         'description': 'CUDA FDK number of projections processed at a time.',
+        },
+    }
+    return opts
+
+
+def _cl_opts():
+    """FDK options for OpenCL engine
+
+    Returns
+    -------
+    output : dict
+        Returns a dictionary of OpenCL specific options helper dictionaries.
+    """
+
+    opts = {
+        'proj_chunk_size': {
+        'long': 'proj-chunk-size',
+        'short': None,
+        'args': int,
+        'handler': int_value,
+        'default': 1,
+        'description': 'OpenCL FDK number of projections processed at a time.',
         },
     }
     return opts
@@ -164,12 +185,12 @@ def default_fdk_opts():
 
 
 def default_fdk_npy_opts():
-    """Numpy specific options
+    """NumPy specific options
 
     Returns
     -------
     output : dict
-        Returns a dictionary of fdk numpy options helper dictionaries.
+        Returns a dictionary of fdk NumPy options helper dictionaries.
     """
 
     opts = default_cone_npy_opts()
@@ -179,17 +200,32 @@ def default_fdk_npy_opts():
 
 
 def default_fdk_cu_opts():
-    """Cuda specific options
+    """CUDA specific options
 
     Returns
     -------
     output : dict
-        Returns a dictionary of fdk cuda options helper dictionaries.
+        Returns a dictionary of fdk CUDA options helper dictionaries.
     """
 
     opts = default_cone_cu_opts()
     opts.update(_shared_opts())
     opts.update(_cu_opts())
+    return opts
+
+
+def default_fdk_cl_opts():
+    """OpenCL specific options
+
+    Returns
+    -------
+    output : dict
+        Returns a dictionary of fdk OpenCL options helper dictionaries.
+    """
+
+    opts = default_cone_cl_opts()
+    opts.update(_shared_opts())
+    opts.update(_cl_opts())
     return opts
 
 
@@ -209,12 +245,12 @@ def default_fdk_conf():
 
 
 def default_fdk_npy_conf():
-    """Configuration dictionary with default values for numpy engine
+    """Configuration dictionary with default values for NumPy engine
 
     Returns
     -------
     output : dict
-        Returns a dictionary of fdk numpy conf settings.
+        Returns a dictionary of fdk NumPy conf settings.
     """
 
     conf = {}
@@ -224,12 +260,12 @@ def default_fdk_npy_conf():
 
 
 def default_fdk_cu_conf():
-    """Configuration dictionary with default values for cuda engine
+    """Configuration dictionary with default values for CUDA engine
 
     Returns
     -------
     output : dict
-        Returns a dictionary of fdk cuda conf settings.
+        Returns a dictionary of fdk CUDA conf settings.
     """
 
     conf = {}
@@ -238,3 +274,16 @@ def default_fdk_cu_conf():
     return conf
 
 
+def default_fdk_cl_conf():
+    """Configuration dictionary with default values for OpenCL engine
+
+    Returns
+    -------
+    output : dict
+        Returns a dictionary of fdk OpenCL conf settings.
+    """
+
+    conf = {}
+    for (key, val) in default_fdk_cl_opts().items():
+        conf[key] = val['default']
+    return conf

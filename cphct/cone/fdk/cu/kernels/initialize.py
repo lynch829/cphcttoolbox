@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# initialize - cuda specific initialization helpers
-# Copyright (C) 2011-2012  The Cph CT Toolbox Project lead by Brian Vinter
+# initialize - CUDA specific initialization helpers
+# Copyright (C) 2011-2014  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -28,17 +28,17 @@
 #
 
 from cphct.log import logging
-from cphct.npycore import allowed_data_types
+from cphct.npycore import allowed_data_types, intp
 from cphct.npycore.io import npy_alloc, get_npy_data
 from cphct.npycore.misc import linear_coordinates
 from cphct.cu.io import cu_alloc
-from cphct.cu.core import gpuarray, get_gpu_layout
+from cphct.cu.core import gpuarray, get_gpu_layout, gpu_get_stream
 from cphct.cone.fdk.npycore.kernels import generate_combined_matrix, \
     generate_detector_boundingboxes
 import pyfft.cuda
 
 # Runtime constant variables for use in kernels - keep order in sync with gpu
-# init code unless using gpu_kernel_auto_init with the same list.
+# init code unless using gpu_kernels_auto_init with the same list.
 
 rt_const = {}
 
@@ -105,16 +105,24 @@ def __get_gpu_layouts(
 
     # Create projection gpu_layout
 
-    gpu_proj_layout = get_gpu_layout(proj_height, proj_width,
+    gpu_proj_layout = get_gpu_layout(1, proj_height, proj_width,
             max_gpu_threads_pr_block)
 
     logging.debug('gpu_proj_layout: %s' % str(gpu_proj_layout))
+
+    # Create projection to complex gpu_layout
+
+    gpu_proj_to_complex_layout = get_gpu_layout(1, proj_height,
+            proj_filter_width, max_gpu_threads_pr_block)
+
+    logging.debug('gpu_proj_to_complex_layout: %s'
+                  % str(gpu_proj_to_complex_layout))
 
     # Create projection filter gpu_layout
     # The projection filter layout is complex
     # and therefore have a complex and a real part
 
-    gpu_proj_filter_layout = get_gpu_layout(proj_height,
+    gpu_proj_filter_layout = get_gpu_layout(1, proj_height,
             proj_filter_width * 2, max_gpu_threads_pr_block)
 
     logging.debug('gpu_proj_filter_layout: %s'
@@ -122,19 +130,123 @@ def __get_gpu_layouts(
 
     # Create backprojection Layout
 
-    gpu_backproject_layout = get_gpu_layout(y_voxels, x_voxels,
+    gpu_backproject_layout = get_gpu_layout(1, y_voxels, x_voxels,
             max_gpu_threads_pr_block)
 
     logging.debug('gpu_backproject_layout: %s'
                   % str(gpu_backproject_layout))
 
-    return (gpu_proj_layout, gpu_proj_filter_layout,
-            gpu_backproject_layout)
+    return (gpu_proj_layout, gpu_proj_to_complex_layout,
+            gpu_proj_filter_layout, gpu_backproject_layout)
+
+
+def __prepare_gpu_kernels(conf):
+    """
+    Prepare GPU kernels for execution
+
+    Parameters
+    ----------
+    conf : dict
+        Configuration dictionary.
+
+    Returns
+    -------
+    output : dict
+       Returns configuration dictionary filled with 
+       prepared CUDA kernels
+    """
+
+    cu_kernels = conf['cu_kernels']
+    uint32 = allowed_data_types['uint32']
+    float32 = allowed_data_types['float32']
+
+    # Put prepared kernels in app_state
+
+    prepared_kernels = {}
+
+    # weight_proj
+
+    prepared_kernels['weight_proj'] = \
+        cu_kernels.get_function('weight_proj')
+    prepared_kernels['weight_proj'].prepare([intp, uint32, intp])
+
+    # proj_to_complex
+
+    prepared_kernels['proj_to_complex'] = \
+        cu_kernels.get_function('proj_to_complex')
+    prepared_kernels['proj_to_complex'].prepare([intp, intp, uint32])
+
+    # filter_proj
+
+    prepared_kernels['filter_proj'] = \
+        cu_kernels.get_function('filter_proj')
+    prepared_kernels['filter_proj'].prepare([intp, intp])
+
+    # complex_to_proj
+
+    prepared_kernels['complex_to_proj'] = \
+        cu_kernels.get_function('complex_to_proj')
+    prepared_kernels['complex_to_proj'].prepare([intp, intp])
+
+    # generate_volume_weight
+
+    prepared_kernels['generate_volume_weight'] = \
+        cu_kernels.get_function('generate_volume_weight')
+    prepared_kernels['generate_volume_weight'].prepare([intp, intp,
+            float32])
+
+    # backproject
+
+    prepared_kernels['backproject'] = \
+        cu_kernels.get_function('backproject')
+    prepared_kernels['backproject'].prepare([
+        intp,
+        intp,
+        uint32,
+        uint32,
+        intp,
+        intp,
+        intp,
+        intp,
+        ])
+
+    # Put prepared kerned in app_state
+
+    conf['app_state']['gpu']['prepared_kernels'] = prepared_kernels
+
+    return conf
+
+
+def __prepare_gpu_streams(conf):
+    """
+    Prepare GPU streams used for async operations
+
+    Parameters
+    ----------
+    conf : dict
+        Configuration dictionary.
+
+    Returns
+    -------
+    output : dict
+       Returns configuration dictionary filled with 
+       GPU streams
+    """
+
+    # Create one stream for each GPU
+
+    conf['app_state']['gpu']['streams'] = {}
+
+    for gpu_id in conf['gpu']['context']:
+        conf['app_state']['gpu']['streams'][gpu_id] = \
+            gpu_get_stream(conf, gpu_id)
+
+    return conf
 
 
 def init_recon(conf, fdt):
     """
-    Initialize data structures for cuda FDK reconstruction
+    Initialize data structures for CUDA FDK reconstruction
 
     Parameters
     ----------
@@ -147,7 +259,7 @@ def init_recon(conf, fdt):
     -------
     output : dict
        Returns configuration dictionary filled with 
-       numpy and cuda FDK reconstruction data structures
+       numpy and CUDA FDK reconstruction data structures
     """
 
     # Create app_state gpu entry
@@ -157,6 +269,7 @@ def init_recon(conf, fdt):
     # Get complex data type
 
     cdt = allowed_data_types[conf['complex_precision']]
+    uint32 = allowed_data_types['uint32']
 
     # Get gpu module handle
 
@@ -171,15 +284,16 @@ def init_recon(conf, fdt):
 
     max_proj_rows = int((detector_boundingboxes[:, 0, 1]
                         - detector_boundingboxes[:, 0, 0]).max())
-    conf['app_state']['projs']['max_rows'] = max_proj_rows
+    conf['app_state']['projs']['max_rows'] = uint32(max_proj_rows)
 
     # Generate GPU layouts for each processing task
 
     conf['app_state']['gpu']['layouts'] = {}
 
     (conf['app_state']['gpu']['layouts']['proj'], conf['app_state'
-     ]['gpu']['layouts']['proj_filter'], conf['app_state']['gpu'
-     ]['layouts']['backproject']) = __get_gpu_layouts(
+     ]['gpu']['layouts']['proj_to_complex'], conf['app_state']['gpu'
+     ]['layouts']['proj_filter'], conf['app_state']['gpu']['layouts'
+     ]['backproject']) = __get_gpu_layouts(
         max_proj_rows,
         conf['detector_columns'],
         conf['proj_filter_width'],
@@ -187,13 +301,6 @@ def init_recon(conf, fdt):
         conf['y_voxels'],
         conf['gpu_target_threads'],
         )
-
-    # Allocate memory for detector_offset
-
-    gpu_proj_row_offset = gpuarray.zeros(1,
-            dtype=allowed_data_types['uint32'])
-    cu_alloc(conf, 'proj_row_offset', gpu_proj_row_offset,
-             gpu_proj_row_offset.nbytes)
 
     # Allocate memory for the transform_matrix on GPU
 
@@ -246,19 +353,17 @@ def init_recon(conf, fdt):
     cu_alloc(conf, 'z_voxel_coordinates', gpu_z_voxel_coordinates,
              gpu_z_voxel_coordinates.nbytes)
 
-    # Allocate memory for projection angle
-
-    gpu_proj_angle_rad = gpuarray.zeros(1, dtype=fdt)
-    cu_alloc(conf, 'proj_angle_rad', gpu_proj_angle_rad,
-             gpu_proj_angle_rad.nbytes)
-
     # Allocate pinned memory for projection data, please note that this is a
     # *host* memory allocation even though we use gpu_module call.
+    # NOTE: Load plugins return a complete projection chunk
+    #       as these are generic between the different recon algorithms.
 
     projs_data = gpu_module.pagelocked_zeros((conf['proj_chunk_size'],
             conf['detector_rows'], conf['detector_columns']), dtype=fdt)
 
     npy_alloc(conf, 'projs_data', projs_data)
+
+    # Allocate device memory for one projection chunk
 
     gpu_projs_data = gpuarray.zeros((conf['proj_chunk_size'],
                                     max_proj_rows,
@@ -284,13 +389,6 @@ def init_recon(conf, fdt):
 
     conf['app_state']['gpu']['fft_plan'] = fft_plan
 
-    # Allocate memory for chunk index
-
-    gpu_chunk_index = gpuarray.zeros(1,
-            dtype=allowed_data_types['uint32'])
-    cu_alloc(conf, 'chunk_index', gpu_chunk_index,
-             gpu_chunk_index.nbytes)
-
     # Allocate pinned memory for one reconstruction chunk
     # http://documen.tician.de/pycuda/driver.html#pagelocked-host-memory
 
@@ -308,6 +406,14 @@ def init_recon(conf, fdt):
             conf['x_voxels']), dtype=fdt)
     cu_alloc(conf, 'volume_weight_matrix', gpu_volume_weight_matrix,
              gpu_volume_weight_matrix.nbytes)
+
+    # Prepare GPU kernel calls
+
+    __prepare_gpu_kernels(conf)
+
+    # Prepare GPU streams for async kernel execution
+
+    __prepare_gpu_streams(conf)
 
     return conf
 

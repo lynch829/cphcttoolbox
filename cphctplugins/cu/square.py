@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # square - plugin to square all data values in array
-# Copyright (C) 2012  The Cph CT Toolbox Project lead by Brian Vinter
+# Copyright (C) 2012-2014  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -95,7 +95,7 @@ def preprocess_input(gpu_input_data, input_meta, conf):
 
     if not hasattr(gpu_input_data, 'dtype'):
         raise ValueError('invalid square preprocess input array')
-    return (square_array(gpu_input_data, out=gpu_input_data),
+    return (square_array(conf, gpu_input_data, out=gpu_input_data),
             input_meta)
 
 
@@ -122,7 +122,7 @@ def postprocess_output(gpu_output_data, output_meta, conf):
     if not hasattr(gpu_output_data, 'dtype'):
         raise ValueError('invalid square postprocess output array')
 
-    return (square_array(gpu_output_data, out=gpu_output_data),
+    return (square_array(conf, gpu_output_data, out=gpu_output_data),
             output_meta)
 
 
@@ -133,7 +133,8 @@ if __name__ == '__main__':
     gpu_count = gpu_module.Device.count()
     if gpu_count < 1:
         raise Exception('No GPUs available!')
-    conf['cuda_device_index'] = 0
+    if conf['gpu_device_index'] < 0:
+        conf['gpu_device_index'] = 0
     gpu_init_ctx(conf)
 
     arange = gpuarray.arange
@@ -149,16 +150,16 @@ if __name__ == '__main__':
         ]:
         data = arange(3, 8, dtype=data_type)
         print 'Square data %s (%s)' % (data, data.dtype.name)
-        out = square_array(data)
+        out = square_array(conf, data)
         print 'Squared to %s (%s)' % (out, out.dtype.name)
         data = arange(3, 8, dtype=data_type)
-        out = square_array(data)
+        out = square_array(conf, data)
         print 'Squared to byte range %s (%s)' % (out, out.dtype.name)
         data = arange(-3, 7, dtype=data_type)
         print 'Square data %s (%s)' % (data, data.dtype.name)
-        out = square_array(data)
+        out = square_array(conf, data)
         print 'Squared to %s (%s)' % (out, out.dtype.name)
         data = arange(-3, 7, dtype=data_type)
-        out = square_array(data)
+        out = square_array(conf, data)
         print 'Squared to byte range %s (%s)' % (out, out.dtype.name)
     gpu_exit(conf)

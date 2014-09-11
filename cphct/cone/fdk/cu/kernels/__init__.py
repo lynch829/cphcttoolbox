@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# __init__ - fdk cuda engine kernels module init
-# Copyright (C) 2011-2012  The Cph CT Toolbox Project lead by Brian Vinter
+# __init__ - FDK CUDA engine kernels module init
+# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -27,7 +27,7 @@
 # -- END_HEADER ---
 #
 
-"""Cph CT Toolbox FDK cuda engine kernels module initializer"""
+"""Cph CT Toolbox FDK CUDA engine kernels module initializer"""
 
 __dummy = \
     '''This dummy right after the module doc string prevents PythonTidy

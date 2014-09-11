@@ -4,7 +4,7 @@
 #
 # --- BEGIN_HEADER ---
 #
-# initialize - numpy specific initialization helpers
+# initialize - NumPy specific initialization helpers
 # Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
@@ -27,18 +27,16 @@
 # -- END_HEADER ---
 #
 
-"""Numpy specific kernel initialization helper functions"""
+"""NumPy specific kernel initialization helper functions"""
 
-from cphct.log import logging
-from cphct.npycore import pi, zeros, ones, arange, sin, cos, tan, \
-    arctan, int32
+from cphct.npycore import pi, zeros, arange, sin, cos, tan, arctan
 from cphct.npycore.io import npy_alloc, get_npy_data
 from cphct.npycore.misc import linear_coordinates
 
 
 def init_recon(conf, fdt):
     """
-    Initialize data structures for numpy Katsevich reconstruction
+    Initialize data structures for NumPy Katsevich reconstruction
 
     Parameters
     ----------
@@ -50,7 +48,7 @@ def init_recon(conf, fdt):
     Returns
     -------
     output : dict
-       Returns configuration dictionary filled with numpy Katsevich
+       Returns configuration dictionary filled with NumPy Katsevich
        data structures
     """
 
@@ -127,19 +125,6 @@ def init_recon(conf, fdt):
                                  + rebin_coords / tan(rebin_coords)
                                  * sin(col_coords[col]))
         fwd_rebin_row[:, col] = row
-
-    # Hilbert helper values
-
-    npy_alloc(conf, 'hilbert_ideal', zeros(conf['kernel_width'],
-              dtype=fdt))
-    hilbert_ideal = get_npy_data(conf, 'hilbert_ideal')
-
-    # We use a simplified hilbert kernel for now
-
-    kernel_radius = conf['kernel_radius']
-    for i in xrange(conf['kernel_width']):
-        hilbert_ideal[i] = (1.0 - cos(pi * (i - kernel_radius - 0.5))) \
-            / (pi * (i - kernel_radius - 0.5))
 
     # Tam-Danielsson boundaries in projections
     # We use extended col coords to allow full interpolation in back projection

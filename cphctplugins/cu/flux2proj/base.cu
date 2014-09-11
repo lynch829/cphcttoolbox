@@ -3,7 +3,7 @@
 # --- BEGIN_HEADER ---
 #
 # kernels - flux2proj CUDA Kernels
-# Copyright (C) 2011  The CT-Toolbox Project lead by Brian Vinter
+# Copyright (C) 2011-2013  The CT-Toolbox Project lead by Brian Vinter
 #
 # This file is part of CT-Toolbox.
 #
@@ -25,12 +25,6 @@
 #
 */
 
-
-/* Constants */
-
-#define DETECTOR_SIZE (rt_detector_rows*rt_detector_columns)
-
-
 /* Flat indexing macros */
 
 #define PROJ_IDX(y,x) (y*rt_detector_columns+x)
@@ -44,20 +38,19 @@
  * values.
  */
 
-#ifdef plugin_rt_air_ref_pixel_idx
-__global__ void flux2proj(float *proj_data,
-			  float *proj_ref_pixel_vals,
-			  unsigned int *proj_count,
-			  float *zero_norm,
-			  float *air_norm) {
+KERNEL void flux2proj(
+            GLOBALMEM float *proj_data,            
+            GLOBALMEM float *zero_norm,
+            GLOBALMEM float *air_norm,
+            const unsigned int first_proj,
+            const unsigned int last_proj
+#ifdef plugin_rt_air_ref_pixel_flat_idx
+            , GLOBALMEM float *proj_ref_pixel_vals) {
 #else
-__global__ void flux2proj(float *proj_data,
-			  unsigned int *proj_count,
-			  float *zero_norm,
-			  float *air_norm) {
+         ) {
 #endif
-   unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;   
-   unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+   unsigned int y = GET_GLOBAL_ID_Y;   
+   unsigned int x = GET_GLOBAL_ID_X;
 
    unsigned int i;
    unsigned int pixel_idx = PROJ_IDX(y,x);
@@ -67,19 +60,21 @@ __global__ void flux2proj(float *proj_data,
    float pixel_val;
    
    
-#ifdef plugin_rt_air_ref_pixel_idx
-   unsigned int air_ref_idx = plugin_rt_air_ref_pixel_idx;
+#ifdef plugin_rt_air_ref_pixel_flat_idx
    float air_val_diff;
-   float air_val_ref = air_norm[plugin_rt_air_ref_pixel_idx];
+   float air_val_ref = air_norm[plugin_rt_air_ref_pixel_flat_idx];
+   float zero_val_ref = zero_norm[plugin_rt_air_ref_pixel_flat_idx];
    float init_air_val = air_val;
 #endif
    
-   for (i=0; i<*proj_count; i++) {
+   // NOTE: 'air' values are dark current corrected in base.py
+
+   for (i=first_proj; i<=last_proj; i++) {
       
-#ifdef plugin_rt_air_ref_pixel_idx
-      air_val_diff = air_val_ref - proj_ref_pixel_vals[i];
-      pixel_val = logf(init_air_val - air_val_diff - zero_val) -
-	          logf(proj_data[pixel_idx] - zero_val);
+#ifdef plugin_rt_air_ref_pixel_flat_idx
+      air_val_diff = air_val_ref - (proj_ref_pixel_vals[i] - zero_val_ref);
+      air_val = logf(init_air_val - air_val_diff);
+      pixel_val = air_val - logf(proj_data[pixel_idx] - zero_val);
       
 #else
       pixel_val = air_val - logf(proj_data[pixel_idx] - zero_val);
@@ -89,16 +84,16 @@ __global__ void flux2proj(float *proj_data,
       // is NaN, but not the other, the result is the non-NaN parameter.
 
       // NaN's are set to zero
+      
       pixel_val = fmaxf(pixel_val, 0.0f);
       
       // INF's are set to zerod air value
+
       pixel_val = fminf(pixel_val, air_val);
       
       proj_data[pixel_idx] = pixel_val;
-      
-#ifdef plugin_rt_air_ref_pixel_idx  
-      air_ref_idx += DETECTOR_SIZE;
-#endif
+
       pixel_idx += plugin_rt_proj_size;
    }
 }
+

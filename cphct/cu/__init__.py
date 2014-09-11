@@ -47,9 +47,8 @@ from incorrectly moving following comments above module doc string'''
 
 # Expose everything from pycuda
 
-from pycuda import *
-from pycuda import compiler, driver, tools, gpuarray, elementwise
+from pycuda import compiler, driver, tools, elementwise
 
 # All sub modules to load in case of 'from X import *'
 
-__all__ = ['core']
+__all__ = ['core', 'gpu_array', 'io']

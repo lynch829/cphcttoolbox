@@ -4,7 +4,7 @@
 #
 # --- BEGIN_HEADER ---
 #
-# io - numpy core specific input/ouput helpers
+# io - NumPy core specific input/ouput helpers
 # Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
@@ -27,7 +27,7 @@
 # -- END_HEADER ---
 #
 
-"""Numpy core specific input/output helper functions"""
+"""NumPy core specific input/output helper functions"""
 
 import os
 from cphct.io import fill_base_conf, expand_path, read_scene, PATH, \
@@ -225,8 +225,8 @@ def load_projs(
     projections = fromfile(path_or_fd, dtype=in_type, count=items)
     try:
         projections.shape = shape
-    except ValueError, vae:
-        raise ValueError('Failed to load from %s - shape mismatch %s (%s)'
+    except ValueError:
+        raise ValueError('Failed to load from %s - shape mismatch %s <=> %s'
                           % (path_or_fd, projections.shape, shape))
     if in_type != out_type:
         projections = projections.astype(out_type)
@@ -347,7 +347,7 @@ def load_projs_chunk(
 def load_data(path_or_fd, shape, data_type):
     """Load next ELEMS *data_type* values from *path_or_fd* file object or path
     and return the values as a matrix with dimensions specified in *shape*:
-    *path_or_fd* must contain binary data and the bytes are loaded into a numpy
+    *path_or_fd* must contain binary data and the bytes are loaded into a NumPy
     array of provided *data_type* with provided dimensions.
     Only ELEMS values will be read so that the function can be called
     repeatedly to load stacked data.
@@ -381,7 +381,7 @@ def load_data(path_or_fd, shape, data_type):
     values = fromfile(path_or_fd, count=elems, dtype=data_type)
     try:
         values.shape = shape
-    except ValueError, vae:
+    except ValueError:
         raise ValueError('Failed to load data from %s - shape mismatch %s (%s)'
                           % (path_or_fd, values.shape, shape))
     return values
@@ -390,7 +390,7 @@ def load_data(path_or_fd, shape, data_type):
 def load_text(path_or_fd, shape, data_type):
     """Load saved (optionally compressed) text data matrix from *path_or_fd*:
     file must contain values saved in numpy.savetxt format and they are
-    loaded into a numpy array with provided shape and dtype.
+    loaded into a NumPy array with provided shape and dtype.
 
     Parameters
     ----------
@@ -418,7 +418,7 @@ def load_text(path_or_fd, shape, data_type):
     values = loadtxt(path_or_fd, dtype=data_type)
     try:
         values.shape = shape
-    except ValueError, vae:
+    except ValueError:
         raise ValueError('Failed to load from %s - shape mismatch %s (%s)'
                           % (path_or_fd, values.shape, shape))
     return values
@@ -427,7 +427,7 @@ def load_text(path_or_fd, shape, data_type):
 def load_native(path_or_fd, shape, data_type):
     """Load saved (optionally compressed) native data matrix from *path_or_fd*:
     file must contain values saved in numpy.save(z) format and they are
-    loaded into a numpy array with provided shape and dtype.
+    loaded into a NumPy array with provided shape and dtype.
 
     Parameters
     ----------
@@ -463,7 +463,7 @@ def load_native(path_or_fd, shape, data_type):
     values = data_type(values)
     try:
         values.shape = shape
-    except ValueError, vae:
+    except ValueError:
         raise ValueError('Failed to load from %s - shape mismatch %s (%s)'
                           % (path_or_fd, values.shape, shape))
     return values
@@ -471,7 +471,7 @@ def load_native(path_or_fd, shape, data_type):
 
 def load_image(path_or_fd, shape, data_type, dynamic_range=None):
     """Try hard to load saved image from *path_or_fd* using any available
-    helper tool. The values are loaded into a numpy array of the requested
+    helper tool. The values are loaded into a NumPy array of the requested
     shape and *data_type*.
 
     Parameters
@@ -549,7 +549,7 @@ def load_image(path_or_fd, shape, data_type, dynamic_range=None):
     values = data_type(values)
     try:
         values.shape = shape
-    except ValueError, vae:
+    except ValueError:
         raise ValueError('Failed to load from %s - shape mismatch %s (%s)'
                           % (path_or_fd, values.shape, shape))
     return values
@@ -600,7 +600,7 @@ def load_auto(path_or_fd, shape, data_type, dynamic_range=None):
 
 def save_data(path_or_fd, values):
     """Save raw matrix values to *path_or_fd*:
-    takes a numpy array as values and dumps a single long string of bytes.
+    takes a NumPy array as values and dumps a single long string of bytes.
 
     Parameters
     ----------
@@ -615,7 +615,7 @@ def save_data(path_or_fd, values):
 
 def save_text(path_or_fd, values):
     """Save matrix values as (optionally compressed) text to *path_or_fd*:
-    takes a numpy array as values and saves in text format suitable for
+    takes a NumPy array as values and saves in text format suitable for
     the load_text function to use.
 
     Parameters
@@ -632,7 +632,7 @@ def save_text(path_or_fd, values):
 def save_native(path_or_fd, values):
     """Save matrix values as (optionally compressed) native data to
     *path_or_fd*:
-    takes a numpy array as values and saves in native format suitable for
+    takes a NumPy array as values and saves in native format suitable for
     the load_native function to use.
 
     Parameters
@@ -750,7 +750,7 @@ def save_auto(path_or_fd, values, dynamic_range=None):
 
 def load_helper_proj(helper, conf, idt):
     """
-    Gets numpy helper projection based on the user provided *helper* value. If
+    Gets NumPy helper projection based on the user provided *helper* value. If
     it is a constant a projection of dimensions from conf detector_rows and
     detector_columns is created and if it is a filename the projection there
     is loaded.
@@ -801,7 +801,7 @@ def load_helper_proj(helper, conf, idt):
 def fill_base_npycore_conf(conf):
     """Remaining default configuration after handling command line options.
     Casts all floating point results using float data type from conf.
-    This version is for the shared numpy core.
+    This version is for the shared NumPy core.
 
     Parameters
     ----------
@@ -811,17 +811,17 @@ def fill_base_npycore_conf(conf):
     Returns
     -------
     output : dict
-        Returns configuration dictionary filled with numpy core settings.
+        Returns configuration dictionary filled with NumPy core settings.
     """
 
     fill_base_conf(conf)
 
-    # Translate precision to numpy data types once and for all
+    # Translate precision to NumPy data types once and for all
 
     adt = allowed_data_types
-    idt = conf['input_data_type'] = adt[conf['input_precision']]
+    conf['input_data_type'] = adt[conf['input_precision']] 
     fdt = conf['data_type'] = adt[conf['precision']]
-    odt = conf['output_data_type'] = adt[conf['output_precision']]
+    conf['output_data_type'] = adt[conf['output_precision']]
 
     # Make sure all float values get the right precision before we continue
 
@@ -829,7 +829,7 @@ def fill_base_npycore_conf(conf):
         if isinstance(val, float):
             conf[key] = fdt(val)
 
-    # Initiate dict for numpy allocations
+    # Initiate dict for NumPy allocations
 
     conf['npy_data'] = {}
 
@@ -896,7 +896,7 @@ def npy_alloc(
     ):
     """Stores a {'data': data, 'size': size} entry with given key in
     conf['npy_data'] .
-    Used to keep track of allocated numpy data and provide shared access.
+    Used to keep track of allocated NumPy data and provide shared access.
 
     Parameters
     ----------
@@ -924,7 +924,7 @@ def npy_alloc(
     """
 
     if not isinstance(data, ndarray):
-        msg = 'Data element is _NOT_ a numpy array'
+        msg = 'Data element is _NOT_ a NumPy array'
         raise ValueError(msg)
 
     if size is None:
@@ -936,7 +936,7 @@ def npy_alloc(
 
 
 def get_npy_data(conf, key):
-    """Extracts numpy data for variable *key*
+    """Extracts NumPy data for variable *key*
 
     Parameters
     ----------
@@ -956,7 +956,7 @@ def get_npy_data(conf, key):
 
 
 def get_npy_size(conf, key):
-    """Extracts numpy data size for variable *key*
+    """Extracts NumPy data size for variable *key*
 
     Parameters
     ----------
@@ -976,7 +976,7 @@ def get_npy_size(conf, key):
 
 
 def get_npy_total_size(conf):
-    """Extracts the total size of allocated numpy data
+    """Extracts the total size of allocated NumPy data
 
     Parameters
     ----------
@@ -993,7 +993,7 @@ def get_npy_total_size(conf):
 
 
 def npy_free(conf, key, ignore_missing=False):
-    """Free numpy data entry *key* from conf['npy_data'] .
+    """Free NumPy data entry *key* from conf['npy_data'] .
 
     Does not explicitly free the data, but free happens automatically during
     garbage collection when no more references to the ndarray exist.
@@ -1005,7 +1005,7 @@ def npy_free(conf, key, ignore_missing=False):
     key : str
         Variable to be freed
     ignore_missing : bool, optional
-        If *True* the numpy data for variable *key* is freed if present.
+        If *True* the NumPy data for variable *key* is freed if present.
         If *False* exceptions may be raised
         based on the value of *key* (see Raises),
 
@@ -1025,7 +1025,7 @@ def npy_free(conf, key, ignore_missing=False):
 
 
 def npy_free_all(conf, garbage_collect=True):
-    """Free all numpy data entries from conf['npy_data'].
+    """Free all NumPy data entries from conf['npy_data'].
 
     Unreachable allocations from ndarray are automatically freed during
     garbage collect, so there's no need to explicitly free them as long as no

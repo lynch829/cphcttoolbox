@@ -94,7 +94,7 @@ def preprocess_input(input_data, input_meta, conf):
     if not hasattr(input_data, 'dtype'):
         raise ValueError('invalid square preprocess input array')
 
-    return (square_array(input_data, out=input_data), input_meta)
+    return (square_array(conf, input_data, out=input_data), input_meta)
 
 
 def postprocess_output(output_data, output_meta, conf):
@@ -120,10 +120,11 @@ def postprocess_output(output_data, output_meta, conf):
     if not hasattr(output_data, 'dtype'):
         raise ValueError('invalid square postprocess input array')
 
-    return (square_array(output_data, out=output_data), output_meta)
+    return (square_array(conf, output_data, out=output_data), output_meta)
 
 
 if __name__ == '__main__':
+    conf = {}
     for data_type in [
         float32,
         float64,
@@ -137,15 +138,15 @@ if __name__ == '__main__':
         ]:
         data = arange(3, 8, dtype=data_type)
         print 'Square data %s (%s)' % (data, data.dtype.name)
-        out = square_array(data)
+        out = square_array(conf, data)
         print 'Squared to %s (%s)' % (out, out.dtype.name)
         data = arange(3, 8, dtype=data_type)
-        out = square_array(data)
+        out = square_array(conf, data)
         print 'Squared to byte range %s (%s)' % (out, out.dtype.name)
         data = arange(-3, 7, dtype=data_type)
         print 'Square data %s (%s)' % (data, data.dtype.name)
-        out = square_array(data)
+        out = square_array(conf, data)
         print 'Squared to %s (%s)' % (out, out.dtype.name)
         data = arange(-3, 7, dtype=data_type)
-        out = square_array(data)
+        out = square_array(conf, data)
         print 'Squared to byte range %s (%s)' % (out, out.dtype.name)

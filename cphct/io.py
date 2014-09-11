@@ -387,6 +387,7 @@ def fill_base_conf(conf):
     """
 
     conf['app_state'] = {}
+    conf['app_state']['exit_code'] = 0
     conf['app_state']['projs'] = {}
     conf['app_state']['backproject'] = {}
 

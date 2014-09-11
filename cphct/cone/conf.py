@@ -4,7 +4,7 @@
 #
 # --- BEGIN_HEADER ---
 #
-# conf - shared cone beam configuration helpers
+# conf - Shared cone beam configuration helpers
 # Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
@@ -123,12 +123,12 @@ def _shared_opts():
 
 
 def _npy_opts():
-    """Cone beam options for numpy engine
+    """Cone beam options for NumPy engine
 
     Returns
     -------
     output : dict
-        Returns a dictionary of numpy specific options helper dictionaries.
+        Returns a dictionary of NumPy specific options helper dictionaries.
     """
 
     opts = {}
@@ -136,12 +136,25 @@ def _npy_opts():
 
 
 def _cu_opts():
-    """Cone beam options for cuda engine
+    """Cone beam options for CUDA engine
 
     Returns
     -------
     output : dict
-        Returns a dictionary of cuda specific options helper dictionaries.
+        Returns a dictionary of CUDA specific options helper dictionaries.
+    """
+
+    opts = {}
+    return opts
+
+
+def _cl_opts():
+    """Cone beam options for OpenCL engine
+
+    Returns
+    -------
+    output : dict
+        Returns a dictionary of OpenCL specific options helper dictionaries.
     """
 
     opts = {}
@@ -163,12 +176,12 @@ def default_cone_opts():
 
 
 def default_cone_npy_opts():
-    """Numpy specific options
+    """NumPy specific options
 
     Returns
     -------
     output : dict
-        Returns a dictionary of cone numpy options helper dictionaries.
+        Returns a dictionary of cone NumPy options helper dictionaries.
     """
 
     opts = default_base_npy_opts()
@@ -178,17 +191,32 @@ def default_cone_npy_opts():
 
 
 def default_cone_cu_opts():
-    """Cuda specific options
+    """CUDA specific options
 
     Returns
     -------
     output : dict
-        Returns a dictionary of cone cuda options helper dictionaries.
+        Returns a dictionary of cone CUDA options helper dictionaries.
     """
 
     opts = default_base_cu_opts()
     opts.update(_shared_opts())
     opts.update(_cu_opts())
+    return opts
+
+
+def default_cone_cl_opts():
+    """OpenCL specific options
+
+    Returns
+    -------
+    output : dict
+        Returns a dictionary of cone OpenCL options helper dictionaries.
+    """
+
+    opts = default_base_cl_opts()
+    opts.update(_shared_opts())
+    opts.update(_cl_opts())
     return opts
 
 
@@ -208,12 +236,12 @@ def default_cone_conf():
 
 
 def default_cone_npy_conf():
-    """Configuration dictionary with default values for numpy engine
+    """Configuration dictionary with default values for NumPy engine
 
     Returns
     -------
     output : dict
-        Returns a dictionary of cone numpy conf settings.
+        Returns a dictionary of cone NumPy conf settings.
     """
 
     conf = {}
@@ -223,15 +251,30 @@ def default_cone_npy_conf():
 
 
 def default_cone_cu_conf():
-    """Configuration dictionary with default values for cuda engine
+    """Configuration dictionary with default values for CUDA engine
 
     Returns
     -------
     output : dict
-        Returns a dictionary of cone cuda conf settings.
+        Returns a dictionary of cone CUDA conf settings.
     """
 
     conf = {}
     for (key, val) in default_cone_cu_opts().items():
+        conf[key] = val['default']
+    return conf
+
+
+def default_cone_cl_conf():
+    """Configuration dictionary with default values for OpenCL engine
+
+    Returns
+    -------
+    output : dict
+        Returns a dictionary of cone OpenCL conf settings.
+    """
+
+    conf = {}
+    for (key, val) in default_cone_cl_opts().items():
         conf[key] = val['default']
     return conf

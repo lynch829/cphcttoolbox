@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # __init__ - cu plugin init
-# Copyright (C) 2012-2013  The Cph CT Toolbox Project lead by Brian Vinter
+# Copyright (C) 2012-2014  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -27,7 +27,7 @@
 # -- END_HEADER ---
 #
 
-"""Cph CT Toolbox cuda plugin module initializer"""
+"""Cph CT Toolbox CUDA plugin module initializer"""
 
 __dummy = \
     '''This dummy right after the module doc string prevents PythonTidy

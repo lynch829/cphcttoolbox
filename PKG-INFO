@@ -1,18 +1,18 @@
 Metadata-Version: 1.1
 Name: cphcttoolbox
-Version: 1.0.4
+Version: 1.1.0
 Summary: Cph CT Toolbox is a selection of Computed Tomography tools
 Home-page: https://code.google.com/p/cphcttoolbox/
 Author: The Cph CT Toolbox maintainers
 Author-email: jonas DOT bardino AT gmail DOT com
 License: GNU GPL v2
-Download-URL: https://pypi.python.org/pypi/cphcttoolbox/
+Download-URL: https://pypi.python.org/packages/source/c/cphcttoolbox/
 Description: Copenhagen Computed Tomography Toolbox is a collection of
         applications and libraries for flexible and efficient CT reconstruction. The
-        toolbox generally take a set of projections (X-ray intensity measurements) and
+        toolbox apps generally take a set of projections (X-ray intensity measurements) and
         filter and back project them in order to recreate the image or volume that the
         projections represent.
-        The project includes both mostly informative CPU implementations and efficient
+        The project includes both mostly informative CPU implementations and highly efficient
         GPU implementations.
         
 Keywords: computed,tomography,science,research,cpu,gpu

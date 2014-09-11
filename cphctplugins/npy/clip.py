@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # clip - clip plugin to truncate data values outside a given range
-# Copyright (C) 2012  The Cph CT Toolbox Project lead by Brian Vinter
+# Copyright (C) 2012-2014 The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -64,8 +64,10 @@ def plugin_init(conf, clip_min, clip_max):
     """
 
     __plugin_state__['name'] = __name__
-    min_val = float(clip_min)
-    max_val = float(clip_max)
+    fdt = conf['data_type']
+
+    min_val = fdt(clip_min)
+    max_val = fdt(clip_max)
     if min_val > max_val:
         raise ValueError('clip_min is greater than clip_max')
     __plugin_state__['clip_min'] = min_val

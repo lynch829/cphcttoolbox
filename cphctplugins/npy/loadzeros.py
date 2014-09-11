@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# loadraw - plugin to load input data from a raw projection file
-# Copyright (C) 2012-2013  The Cph CT Toolbox Project lead by Brian Vinter
+# loadzeros - plugin to simulate input data load
+# Copyright (C) 2012-2014  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -146,7 +146,7 @@ def load_input(
     # Generate meta data
 
     input_meta[:] = []
-    for meta_idx in xrange(last_proj - first_proj + 1):
+    for meta_idx in xrange(nr_projs):
         input_meta.append({})
         proj_idx = first_proj + meta_idx
         input_meta[meta_idx]['angle'] = angles_data[proj_idx]

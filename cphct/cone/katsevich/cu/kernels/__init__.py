@@ -4,7 +4,7 @@
 #
 # --- BEGIN_HEADER ---
 #
-# init - cuda specific katsevich reconstruction kernels
+# init - CUDA specific katsevich reconstruction kernels
 # Copyright (C) 2011-2013  The CT-Toolbox Project lead by Brian Vinter
 #
 # This file is part of CT-Toolbox.
@@ -27,7 +27,7 @@
 # -- END_HEADER ---
 #
 
-"""Spiral cone beam CT kernels using the Katsevich algorithm"""
+"""Spiral cone beam CT CUDA kernels using the Katsevich algorithm"""
 
 __dummy = \
     '''This dummy right after the module doc string prevents PythonTidy

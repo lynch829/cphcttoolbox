@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# initialize - cuda specific initialization helpers
-# Copyright (C) 2011-2012  The Cph CT Toolbox Project lead by Brian Vinter
+# initialize - CUDA specific initialization helpers
+# Copyright (C) 2011-2014  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -27,18 +27,19 @@
 # -- END_HEADER ---
 #
 
-"""Numpy specific kernel initialization helper functions"""
+"""CUDA specific kernel initialization helper functions"""
 
 from cphct.log import logging
-from cphct.npycore import pi, zeros, arange, sin, cos, tan, \
-    arctan
-from cphct.npycore.io import npy_alloc, get_npy_data, get_npy_size
+from cphct.npycore import pi, zeros, arange, sin, cos, tan, arctan, \
+    allowed_data_types, intp
+from cphct.npycore.io import npy_alloc, get_npy_data
+from cphct.cu import gpuarray
 from cphct.cu.io import cu_alloc, get_cu_data
-from cphct.cu.core import get_gpu_layout
+from cphct.cu.core import get_gpu_layout, gpu_get_stream
 from cphct.npycore.misc import linear_coordinates
 
 # Runtime constant variables for use in kernels - keep order in sync with gpu
-# init code unless using gpu_kernel_auto_init with the same list.
+# init code unless using gpu_kernels_auto_init with the same list.
 
 rt_const = {}
 
@@ -52,8 +53,9 @@ rt_const['int'] = [
     'chunk_projs_offset',
     'kernel_radius',
     'kernel_width',
+    'projs_per_turn',
     ]
-    
+
 rt_const['float'] = [
     's_min',
     'delta_s',
@@ -85,6 +87,7 @@ def __get_gpu_layouts(
     proj_height,
     proj_width,
     proj_rebin,
+    filtered_projs,
     x_voxels,
     y_voxels,
     chunk_size,
@@ -104,6 +107,8 @@ def __get_gpu_layouts(
        Number of columns in the projection matrix
     proj_rebin : int
        Number of rebin rows in the projection filtering
+    filtered_projs : int
+       Number of projections filtered in one batch
     x_voxels : int
        Field of View resolution in x
     y_voxels : int
@@ -127,82 +132,186 @@ def __get_gpu_layouts(
     # Create projection gpu_layout:
     # iterate over columns for memory coalescing
 
-    gpu_rebin_layout = get_gpu_layout(proj_height, proj_width,
-                                      max_gpu_threads_pr_block)
+    gpu_rebin_layout = get_gpu_layout(filtered_projs, proj_rebin,
+            proj_width, max_gpu_threads_pr_block)
 
     logging.debug('gpu_rebin_layout: %s' % str(gpu_rebin_layout))
 
     # Create projection filter gpu_layout:
     # iterate over columns for memory coalescing
 
-    gpu_proj_layout = get_gpu_layout(proj_height, proj_width,
-                                     max_gpu_threads_pr_block)
+    gpu_proj_layout = get_gpu_layout(filtered_projs, proj_height,
+            proj_width, max_gpu_threads_pr_block)
 
     logging.debug('gpu_proj_layout: %s' % str(gpu_proj_layout))
 
     # Create backprojection Layout:
     # iterate over z for memory coalescing
 
-    gpu_backproject_layout = get_gpu_layout(y_voxels, chunk_size,
-            max_gpu_threads_pr_block)
+    gpu_backproject_layout = get_gpu_layout(chunk_size, y_voxels,
+            x_voxels, max_gpu_threads_pr_block)
 
-    logging.debug('gpu_backproject_layout: %s' % str(gpu_backproject_layout))
-    
+    logging.debug('gpu_backproject_layout: %s'
+                  % str(gpu_backproject_layout))
 
-    # We want to divide work so that thread warps access a sequential slice of
-    # memory, i.e. pixels/voxels in the same column. Thus for filtering we use
-    # first index inside thread blocks for column index and leave rows and
-    # projs to fill the rest. Similarly we iterate fastest over z then y and x
-    # to improve performance.
+    return (gpu_rebin_layout, gpu_proj_layout, gpu_backproject_layout)
 
-    # Layouts are calculated for a single projection so we scale grids to fit
 
-    rebin_block, rebin_grid = gpu_rebin_layout
-    proj_block, proj_grid = gpu_proj_layout
-    backproject_block, backproject_grid = gpu_backproject_layout
+def __prepare_gpu_kernels(conf):
+    """
+    Prepare GPU kernels for execution
 
-    # GPUs with compute capability 2.0+ and CUDA 4.0+ support 3D grids.
-    # Fall back to more compute intensive packed index calculation.
-    # GPU typically has x-dim >= y-dim >= z-dim support so fit to order
-    #       ... we expect detector_rows >= detector_columns >= chunk_projs
-    #       ... and x_voxels >= y_voxels >= chunk_size
-    
-    gpu_specs = conf['gpu']['specs']
-    if gpu_specs['MAX_GRID_DIM_Z'] >= 1:
-        logging.debug('using 3D gpu grid')
-        proj_grid = (conf['detector_columns'] / proj_block[0],
-                     conf['detector_rows'] / proj_block[1],
-                     conf['filter_out_projs'])
-        rebin_grid = (conf['detector_columns'] / rebin_block[0],
-                      conf['detector_rebin_rows'] / rebin_block[1],
-                      conf['filter_out_projs'])
-        backproject_grid = (conf['x_voxels'],
-                            conf['y_voxels'] / backproject_block[1],
-                            conf['chunk_size'] / backproject_block[0])
-    else:
-        proj_grid = (conf['detector_columns'] * conf['detector_rows']
-                       / (proj_block[0] * proj_block[1]), conf['chunk_projs'])
-        rebin_grid = (conf['detector_columns'] * conf['detector_rebin_rows']
-                      / (rebin_block[0] * rebin_block[1]), conf['chunk_projs'])
-        backproject_grid = (conf['x_voxels'],
-                            conf['chunk_size'] * conf['y_voxels']
-                            / (backproject_block[0] * backproject_block[1]))
-    logging.debug('filter kernels with layout %s %s' % (proj_block,
-                                                        proj_grid))
-    logging.debug('rebin kernels with layout %s %s' % (rebin_block,
-                                                       rebin_grid))
-    logging.debug('backproject kernels with layout %s %s' % (backproject_block,
-                                                             backproject_grid))
-    gpu_rebin_layout = (rebin_block, rebin_grid)
-    gpu_proj_layout = (proj_block, proj_grid)
-    gpu_backproject_layout = (backproject_block, backproject_grid)
+    Parameters
+    ----------
+    conf : dict
+        Configuration dictionary.
 
-    return (gpu_rebin_layout, gpu_proj_layout,
-            gpu_backproject_layout)
+    Returns
+    -------
+    output : dict
+       Returns configuration dictionary filled with 
+       prepared CUDA kernels
+    """
+
+    cu_kernels = conf['cu_kernels']
+    int32 = allowed_data_types['int32']
+
+    # Put prepared kernels in app_state
+
+    prepared_kernels = {}
+
+    # flat_diff_chunk
+
+    prepared_kernels['flat_diff_chunk'] = \
+        cu_kernels.get_function('flat_diff_chunk')
+    prepared_kernels['flat_diff_chunk'].prepare([int32, int32, intp,
+            intp])
+
+    # flat_fwd_rebin_chunk
+
+    prepared_kernels['flat_fwd_rebin_chunk'] = \
+        cu_kernels.get_function('flat_fwd_rebin_chunk')
+    prepared_kernels['flat_fwd_rebin_chunk'].prepare([int32, int32,
+            intp, intp])
+
+    # flat_convolve_chunk
+
+    prepared_kernels['flat_convolve_chunk'] = \
+        cu_kernels.get_function('flat_convolve_chunk')
+    prepared_kernels['flat_convolve_chunk'].prepare([int32, int32,
+            intp, intp, intp])
+
+    # flat_rev_rebin_chunk
+
+    prepared_kernels['flat_rev_rebin_chunk'] = \
+        cu_kernels.get_function('flat_rev_rebin_chunk')
+    prepared_kernels['flat_rev_rebin_chunk'].prepare([int32, int32,
+            intp, intp])
+
+    # flat_backproject_chunk
+
+    prepared_kernels['flat_backproject_chunk'] = \
+        cu_kernels.get_function('flat_backproject_chunk')
+    prepared_kernels['flat_backproject_chunk'].prepare([
+        int32,
+        int32,
+        int32,
+        int32,
+        int32,
+        intp,
+        intp,
+        intp,
+        intp,
+        ])
+
+    # curved_diff_chunk
+
+    prepared_kernels['curved_diff_chunk'] = \
+        cu_kernels.get_function('curved_diff_chunk')
+    prepared_kernels['curved_diff_chunk'].prepare([int32, int32, intp,
+            intp])
+
+    # curved_fwd_rebin_chunk
+
+    prepared_kernels['curved_fwd_rebin_chunk'] = \
+        cu_kernels.get_function('curved_fwd_rebin_chunk')
+    prepared_kernels['curved_fwd_rebin_chunk'].prepare([int32, int32,
+            intp, intp])
+
+    # curved_convolve_chunk
+
+    prepared_kernels['curved_convolve_chunk'] = \
+        cu_kernels.get_function('curved_convolve_chunk')
+    prepared_kernels['curved_convolve_chunk'].prepare([int32, int32,
+            intp, intp, intp])
+
+    # curved_rev_rebin_chunk
+
+    prepared_kernels['curved_rev_rebin_chunk'] = \
+        cu_kernels.get_function('curved_rev_rebin_chunk')
+    prepared_kernels['curved_rev_rebin_chunk'].prepare([int32, int32,
+            intp, intp])
+
+    # curved_backproject_chunk
+
+    prepared_kernels['curved_backproject_chunk'] = \
+        cu_kernels.get_function('curved_backproject_chunk')
+    prepared_kernels['curved_backproject_chunk'].prepare([
+        int32,
+        int32,
+        int32,
+        int32,
+        int32,
+        intp,
+        intp,
+        intp,
+        intp,
+        ])
+
+    # checksum
+
+    prepared_kernels['checksum_array'] = \
+        cu_kernels.get_function('checksum_array')
+    prepared_kernels['checksum_array'].prepare([intp, intp, int32,
+            int32])
+
+    # Put prepared kerned in app_state
+
+    conf['app_state']['gpu']['prepared_kernels'] = prepared_kernels
+
+    return conf
+
+
+def __prepare_gpu_streams(conf):
+    """
+    Prepare GPU streams used for async operations
+
+    Parameters
+    ----------
+    conf : dict
+        Configuration dictionary.
+
+    Returns
+    -------
+    output : dict
+       Returns configuration dictionary filled with 
+       GPU streams
+    """
+
+    # Create one stream for each GPU
+
+    conf['app_state']['gpu']['streams'] = {}
+
+    for gpu_id in conf['gpu']['context']:
+        conf['app_state']['gpu']['streams'][gpu_id] = \
+            gpu_get_stream(conf, gpu_id)
+
+    return conf
+
 
 def init_recon(conf, fdt):
     """
-    Initialize data structures for cuda Katsevich reconstruction
+    Initialize data structures for CUDA Katsevich reconstruction
 
     Parameters
     ----------
@@ -214,7 +323,7 @@ def init_recon(conf, fdt):
     Returns
     -------
     output : dict
-       Returns configuration dictionary filled with cuda Katsevich
+       Returns configuration dictionary filled with CUDA Katsevich
        data structures
     """
 
@@ -224,17 +333,16 @@ def init_recon(conf, fdt):
 
     # Get gpu module handle
 
-    gpu_module = conf['gpu']['module']
-    
     conf['app_state']['gpu']['layouts'] = {}
 
     (conf['app_state']['gpu']['layouts']['rebin'], conf['app_state'
-     ]['gpu']['layouts']['proj'], conf['app_state']['gpu'
-     ]['layouts']['backproject']) = __get_gpu_layouts(
+     ]['gpu']['layouts']['proj'], conf['app_state']['gpu']['layouts'
+     ]['backproject']) = __get_gpu_layouts(
         conf,
         conf['detector_rows'],
         conf['detector_columns'],
         conf['detector_rebin_rows'],
+        conf['filter_out_projs'],
         conf['x_voxels'],
         conf['y_voxels'],
         conf['chunk_size'],
@@ -252,13 +360,10 @@ def init_recon(conf, fdt):
     npy_alloc(conf, 'recon_chunk', zeros((conf['chunk_size'],
               conf['y_voxels'], conf['x_voxels']), dtype=fdt))
 
-
     # Allocate memory for projection data
 
     npy_alloc(conf, 'projs_data', zeros((1, conf['detector_rows'],
               conf['detector_columns']), dtype=fdt))
-
-
 
     npy_alloc(conf, 'source_pos', conf['s_min'] + conf['delta_s']
               * (arange(conf['total_projs'], dtype=fdt) + 0.5))
@@ -317,18 +422,9 @@ def init_recon(conf, fdt):
                                  * sin(col_coords[col]))
         fwd_rebin_row[:, col] = row
 
-    # Hilbert helper values
+    # Filter helper
 
-    npy_alloc(conf, 'hilbert_ideal', zeros(conf['kernel_width'],
-              dtype=fdt))
-    hilbert_ideal = get_npy_data(conf, 'hilbert_ideal')
-
-    # We use a simplified hilbert kernel for now
-
-    kernel_radius = conf['kernel_radius']
-    for i in xrange(conf['kernel_width']):
-        hilbert_ideal[i] = (1.0 - cos(pi * (i - kernel_radius - 0.5))) \
-            / (pi * (i - kernel_radius - 0.5))
+    proj_filter_array = get_npy_data(conf, 'proj_filter_array')
 
     # Tam-Danielsson boundaries in projections
     # We use extended col coords to allow full interpolation in back projection
@@ -338,15 +434,15 @@ def init_recon(conf, fdt):
         max_help = min_help.copy()
         min_help[conf['detector_columns'] / 2:] -= 2 * pi
         max_help[:conf['detector_columns'] / 2] += 2 * pi
-        proj_row_mins = conf['progress_per_turn'] / pi * min_help / \
-                        (1 - cos(min_help))
-        proj_row_maxs = conf['progress_per_turn'] / pi * max_help / \
-                        (1 - cos(max_help))
+        proj_row_mins = conf['progress_per_turn'] / pi * min_help / (1
+                - cos(min_help))
+        proj_row_maxs = conf['progress_per_turn'] / pi * max_help / (1
+                - cos(max_help))
     elif conf['detector_shape'] == 'curved':
-        proj_row_mins = -conf['progress_per_turn'] / pi * \
-                        (pi / 2 + col_coords_ext) / cos(col_coords_ext)
-        proj_row_maxs = conf['progress_per_turn'] / pi * \
-                        (pi / 2 - col_coords_ext) / cos(col_coords_ext)
+        proj_row_mins = -conf['progress_per_turn'] / pi * (pi / 2
+                + col_coords_ext) / cos(col_coords_ext)
+        proj_row_maxs = conf['progress_per_turn'] / pi * (pi / 2
+                - col_coords_ext) / cos(col_coords_ext)
     npy_alloc(conf, 'proj_row_mins', proj_row_mins)
     npy_alloc(conf, 'proj_row_maxs', proj_row_maxs)
 
@@ -392,8 +488,6 @@ def init_recon(conf, fdt):
     npy_alloc(conf, 'input_chunk', zeros((conf['backproject_in_projs'],
               conf['detector_rows'], conf['detector_columns']),
               dtype=fdt))
-    npy_alloc(conf, 'output_chunk', zeros((conf['x_voxels'],
-              conf['y_voxels'], conf['chunk_size']), dtype=fdt))
 
     if conf['checksum']:
 
@@ -405,51 +499,55 @@ def init_recon(conf, fdt):
 
     # Matrices for storage in device memory
 
+    cu_mirrors = [
+        'filter_in',
+        'filter_diff',
+        'filter_rebin',
+        'filter_conv',
+        'filter_out',
+        'input_chunk',
+        'recon_chunk',
+        'proj_row_mins',
+        'proj_row_maxs',
+        ]
+    if conf['proj_filter'] != 'skip':
+        cu_mirrors.append('proj_filter_array')
+
+    if conf['checksum']:
+        cu_mirrors.append('check_dest')
+
     total_size = 0
-    for buf_name in ('filter_in', 'filter_diff', 'filter_rebin',
-                     'filter_conv', 'filter_out', 'input_chunk',
-                     'output_chunk', 'hilbert_ideal', 'proj_row_mins',
-                     'proj_row_maxs'):
-        buf_size = get_npy_size(conf, buf_name)
-        logging.debug('cu allocing %dB for %s' % (buf_size, buf_name))
-        cu_alloc(conf, buf_name, gpu_module.mem_alloc(buf_size), buf_size)
-        total_size += buf_size
-        logging.debug('cu alloc size for %s is %s - total %s' % \
-                      (buf_name, buf_size, total_size))
+    for gpu_array_name in cu_mirrors:
+        npy_array = get_npy_data(conf, gpu_array_name)
+        gpu_array = gpuarray.zeros(npy_array.shape, npy_array.dtype)
+
+        cu_alloc(conf, gpu_array_name, gpu_array, gpu_array.nbytes)
+        logging.debug('cu allocing %dB for %s' % (gpu_array.nbytes,
+                      gpu_array_name))
+
+        total_size += gpu_array.nbytes
+        logging.debug('cu alloc size for %s is %s - total %s'
+                      % (gpu_array_name, gpu_array.nbytes, total_size))
 
     # Get handles to GPU structures and copy conf/helpers to constant memory
 
-    conf['compute'] = {'kernels': {}}
-    compute_kernels = conf['compute']['kernels']
-    gpu_hilbert_ideal = get_cu_data(conf, 'hilbert_ideal')
+    gpu_proj_filter_array = get_cu_data(conf, 'proj_filter_array')
     gpu_proj_row_mins = get_cu_data(conf, 'proj_row_mins')
     gpu_proj_row_maxs = get_cu_data(conf, 'proj_row_maxs')
 
-    gpu_module.memcpy_htod(gpu_hilbert_ideal, hilbert_ideal)
-    gpu_module.memcpy_htod(gpu_proj_row_mins, proj_row_mins)
-    gpu_module.memcpy_htod(gpu_proj_row_maxs, proj_row_maxs)
+    if conf['proj_filter'] != 'skip':
+        gpu_proj_filter_array.set(proj_filter_array)
+    gpu_proj_row_mins.set(proj_row_mins)
+    gpu_proj_row_maxs.set(proj_row_maxs)
 
-    cu_kernels = conf['cu_kernels']
-    compute_kernels['flat_diff_chunk'] = cu_kernels.get_function(
-        'flat_diff_chunk')
-    compute_kernels['flat_fwd_rebin_chunk'] = cu_kernels.get_function(
-        'flat_fwd_rebin_chunk')
-    compute_kernels['flat_convolve_chunk'] = cu_kernels.get_function(
-        'flat_convolve_chunk')
-    compute_kernels['flat_rev_rebin_chunk'] = cu_kernels.get_function(
-        'flat_rev_rebin_chunk')
-    compute_kernels['flat_backproj_chunk'] = cu_kernels.get_function(
-        'flat_backproject_chunk')
-    compute_kernels['curved_diff_chunk'] = cu_kernels.get_function(
-        'curved_diff_chunk')
-    compute_kernels['curved_fwd_rebin_chunk'] = cu_kernels.get_function(
-        'curved_fwd_rebin_chunk')
-    compute_kernels['curved_convolve_chunk'] = cu_kernels.get_function(
-        'curved_convolve_chunk')
-    compute_kernels['curved_rev_rebin_chunk'] = cu_kernels.get_function(
-        'curved_rev_rebin_chunk')
-    compute_kernels['curved_backproj_chunk'] = cu_kernels.get_function(
-        'curved_backproject_chunk')
-    compute_kernels['checksum'] = cu_kernels.get_function('checksum_array')
+    # Prepare GPU kernel calls
+
+    __prepare_gpu_kernels(conf)
+
+    # Prepare GPU streams for async kernel execution
+
+    __prepare_gpu_streams(conf)
 
     return conf
+
+

@@ -4,7 +4,7 @@
 #
 # --- BEGIN_HEADER ---
 #
-# base - cuda back end functions shared by plugin and tools
+# base - CUDA back end functions shared by plugin and tools
 # Copyright (C) 2012  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
@@ -27,7 +27,7 @@
 # -- END_HEADER ---
 #
 
-"""Cph CT Toolbox cuda back end functions shared by plugins and tools.
+"""Cph CT Toolbox CUDA back end functions shared by plugins and tools.
 We separate I/O from the actual handlers so that they can be used inside apps
 and in separate tools scripts."""
 
@@ -55,7 +55,7 @@ def prepare_output(shape, conf):
     return gpuarray.zeros(shape, dtype=fdt)
 
 
-def square_array(data, out=None):
+def square_array(conf, data, out=None):
     """Square all values in data.
 
     Parameters
@@ -81,6 +81,6 @@ def square_array(data, out=None):
         Returns squared ndarray.
     """
 
-    return gpuarray_square(data, out)
+    return gpuarray_square(conf, data, out)
 
 

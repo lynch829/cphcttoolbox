@@ -5,7 +5,7 @@
 # --- BEGIN_HEADER ---
 #
 # flux2proj - plugin to convert measured intensities to attenuation projections
-# Copyright (C) 2012  The Cph CT Toolbox Project lead by Brian Vinter
+# Copyright (C) 2012-2014  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -32,12 +32,12 @@ attenuation projections.
 """
 
 import os
-from cphct.npycore import log, allowed_data_types
+from cphct.npycore import log, allowed_data_types, intp
 from cphct.npycore.io import load_helper_proj, get_npy_data
 from cphct.npycore.utils import check_norm
 from cphct.plugins import get_plugin_var
-from cphct.cu.core import gpuarray, get_gpu_layout, generate_gpu_init, \
-    load_kernel_source, compile_kernels, cuda, gpu_pointer_from_array
+from cphct.cu.core import gpuarray, generate_gpu_init, \
+    gpu_alloc_from_array, load_kernels_source, compile_kernels
 from cphct.cu.misc import gpuarray_copy
 
 # Internal plugin state for individual plugin instances
@@ -45,15 +45,15 @@ from cphct.cu.misc import gpuarray_copy
 __plugin_state__ = {}
 
 
-def __make_gpu_kernels(conf, air_ref_pixel_idx=None):
+def __make_gpu_kernels(conf, air_ref_pixel):
     """Make the plugin GPU kernels based on *conf* and plugin kernel source
     
     Parameters
     ----------
     conf : dict
        A dictionary of configuration options.
-    air_ref_pixel_idx : int, optional
-       Flat projection pixel posistion containing air value
+    air_ref_pixel : tuple
+        Tuble of pixel posistion (y,x) in projection containing air value
        
     Returns
     -------
@@ -63,39 +63,41 @@ def __make_gpu_kernels(conf, air_ref_pixel_idx=None):
     """
 
     rt_const = {}
-    rt_const['int'] = ['detector_rows', 'detector_columns']
+    rt_const['int'] = ['detector_columns']
     rt_const['float'] = []
     rt_const['str'] = []
 
-    cu_kernel_path = '%s/base.cu' % os.path.dirname(__file__)
+    cu_kernels_path = '%s/base.cu' % os.path.dirname(__file__)
 
-    kernel_code = generate_gpu_init(conf, rt_const)
+    kernels_code = generate_gpu_init(conf, rt_const)
 
-    kernel_code += '\n'
-    kernel_code += \
+    kernels_code += '\n'
+    kernels_code += \
         '/* --- BEGIN AUTOMATIC PLUGIN RUNTIME CONFIGURATION --- */\n'
-    kernel_code += '\n'
+    kernels_code += '\n'
 
-    if air_ref_pixel_idx is not None:
-        kernel_code += '#define plugin_rt_air_ref_pixel_idx %s\n' \
-            % air_ref_pixel_idx
+    if air_ref_pixel is not None:
+        kernels_code += \
+            '#define plugin_rt_air_ref_pixel_flat_idx ((int)%d)\n' \
+            % (conf['detector_columns'] * air_ref_pixel[0]
+               + air_ref_pixel[1])
 
     if 'max_rows' in conf['app_state']['projs']:
         projection_rows = conf['app_state']['projs']['max_rows']
     else:
         projection_rows = conf['detector_rows']
 
-    kernel_code += '#define plugin_rt_proj_size %s\n' \
+    kernels_code += '#define plugin_rt_proj_size %s\n' \
         % (projection_rows * conf['detector_columns'])
 
-    kernel_code += '\n'
-    kernel_code += \
+    kernels_code += '\n'
+    kernels_code += \
         '/* --- END AUTOMATIC PLUGIN RUNTIME CONFIGURATION --- */\n'
-    kernel_code += '\n'
+    kernels_code += '\n'
 
-    kernel_code += load_kernel_source(cu_kernel_path)
+    kernels_code += load_kernels_source(cu_kernels_path)
 
-    (_, kernels, _) = compile_kernels(conf, kernel_code)
+    (_, kernels, _) = compile_kernels(conf, kernels_code)
 
     return kernels
 
@@ -143,10 +145,14 @@ def plugin_init(
         a suitable projection file nor
         a single value compatible with dtype_norm,
         if zero norm is greater than air norm or
-        if air_ref_pixel is set not a valid (y,x) index
+        if air_ref_pixel is set and chunk 0 is not in chunks_enabled or
+        if air_ref_pixel is set but not a valid (y,x) index or 
+        if air_ref_pixel is outside the first projection bounding box
     pycuda.driver.CompileError
         If CUDA kernel didn't compile 
     """
+
+    gpu_module = conf['gpu']['module']
 
     # Transform dtype_norm string to dtype
 
@@ -169,20 +175,43 @@ def plugin_init(
         # Create flat air reference pixel index
 
         air_ref_list = air_ref_pixel.split(',')
-        air_ref_pixel_idx = int(air_ref_list[0].strip('(').strip()) \
-            * conf['detector_columns'] + int(air_ref_list[1].strip(')'
-                ).strip())
 
-        # Generate tmp input data gpu array
-        # Due to GPU out-of-order execution we need a
-        # proj copy when using air_ref_pixel
+        air_ref_pixel = (int(air_ref_list[0].strip('(').strip()),
+                         int(air_ref_list[1].strip(')').strip()))
+
+        # Check if air_ref_pixel is within the first detector bounding box
+
+        detector_boundingboxes = get_npy_data(conf,
+                'detector_boundingboxes')
+
+        # NOTE: Right now we only support air ref pixels
+        # that is inside the first projection bounding box
+
+        if not 0 in conf['chunks_enabled']:
+            msg_ln1 = 'air_ref_pixel support require chunk: 0'
+            raise ValueError('%s\n%s' % msg_ln1)
+
+        if detector_boundingboxes is not None and (air_ref_pixel[0]
+                < detector_boundingboxes[0, 0, 0] or air_ref_pixel[0]
+                > detector_boundingboxes[0, 0, 1] or air_ref_pixel[1]
+                < detector_boundingboxes[0, 1, 0] or air_ref_pixel[1]
+                > detector_boundingboxes[0, 1, 1]):
+
+            msg_ln1 = 'air_ref_pixel: %s must be inside' \
+                % str(air_ref_pixel)
+            msg_ln2 = 'first projection chunk: (%s, %s)' \
+                % (str(detector_boundingboxes[0, 0, 1]),
+                   str(detector_boundingboxes[0, 1, 1]))
+            raise ValueError('%s\n%s' % (msg_ln1, msg_ln2))
+
+        # Allocate GPU memory for air ref pixels
 
         projs_data = get_npy_data(conf, 'projs_data')
 
-        gpu_proj_ref_pixel_vals = gpuarray.zeros((projs_data.shape[0],
-                1), projs_data.dtype)
+        gpu_proj_ref_pixel_vals = gpuarray.zeros(conf['projs_per_turn'
+                ], projs_data.dtype)
     else:
-        air_ref_pixel_idx = None
+        air_ref_pixel = None
         gpu_proj_ref_pixel_vals = None
 
     # Check norm values
@@ -201,27 +230,36 @@ def plugin_init(
 
     # If air_ref_pixel is defined log is posponed to GPU
 
-    if air_ref_pixel == None:
+    if air_ref_pixel is None:
         log(air_norm_matrix, air_norm_matrix)
 
-    __plugin_state__['gpu_air_norm'] = gpuarray.to_gpu(air_norm_matrix)
-    __plugin_state__['gpu_proj_count'] = gpuarray.zeros(1,
-            dtype=allowed_data_types['uint32'])
-    __plugin_state__['gpu_zero_norm'] = \
-        gpuarray.to_gpu(zero_norm_matrix)
+    gpu_air_norm = gpuarray.to_gpu(air_norm_matrix)
+    gpu_zero_norm = gpuarray.to_gpu(zero_norm_matrix)
+
+    gpu_kernels = __make_gpu_kernels(conf, air_ref_pixel)
+    gpu_flux2proj = gpu_kernels.get_function('flux2proj')
+
+    # Prepare kernel
+
+    kernel_arg_types = [intp, intp, intp, allowed_data_types['uint32'],
+                        allowed_data_types['uint32']]
+
+    if air_ref_pixel is not None:
+        kernel_arg_types.append([intp])
+
+    gpu_flux2proj.prepare(kernel_arg_types)
+
+    __plugin_state__['gpu_flux2proj'] = gpu_flux2proj
+
     __plugin_state__['gpu_layout'] = conf['app_state']['gpu']['layouts'
             ]['proj']
 
-    __plugin_state__['air_ref_pixel_idx'] = air_ref_pixel_idx
+    __plugin_state__['air_ref_pixel'] = air_ref_pixel
     __plugin_state__['gpu_proj_ref_pixel_vals'] = \
         gpu_proj_ref_pixel_vals
 
-    gpu_kernels = __make_gpu_kernels(conf, air_ref_pixel_idx)
-
-    __plugin_state__['gpu_kernels'] = gpu_kernels
-
-    if not __plugin_state__['gpu_kernels']:
-        raise cuda.CompileError('no valid gpu compute kernels found!')
+    __plugin_state__['gpu_zero_norm'] = gpu_zero_norm
+    __plugin_state__['gpu_air_norm'] = gpu_air_norm
 
 
 def plugin_exit(
@@ -292,57 +330,74 @@ def preprocess_input(
 
     # Retrieve initialized variables
 
-    gpu_proj_count = __plugin_state__['gpu_proj_count']
-    gpu_proj_ref_pixel_vals = __plugin_state__['gpu_proj_ref_pixel_vals'
-            ]
     gpu_zero_norm = __plugin_state__['gpu_zero_norm']
     gpu_air_norm = __plugin_state__['gpu_air_norm']
+    gpu_proj_ref_pixel_vals = __plugin_state__['gpu_proj_ref_pixel_vals'
+            ]
     gpu_layout = __plugin_state__['gpu_layout']
-    gpu_kernels = __plugin_state__['gpu_kernels']
-    air_ref_pixel_idx = __plugin_state__['air_ref_pixel_idx']
+    gpu_flux2proj = __plugin_state__['gpu_flux2proj']
+    air_ref_pixel = __plugin_state__['air_ref_pixel']
 
     # Raise error if input is not a numpy array
 
     if not hasattr(gpu_input_data, 'dtype'):
         raise ValueError('invalid flux_to_proj preprocess input array')
 
-    gpu_module.memset_d32(gpu_proj_count.gpudata,
-                          gpu_input_data.shape[0], 1)
+    first_proj = conf['app_state']['projs']['first']
+    last_proj = conf['app_state']['projs']['last']
 
-    gpu_flux2proj = gpu_kernels.get_function('flux2proj')
+    if air_ref_pixel is not None:
 
-    if air_ref_pixel_idx is None:
-        gpu_flux2proj(
-            gpu_input_data,
-            gpu_proj_count,
-            gpu_zero_norm,
-            gpu_air_norm,
-            block=gpu_layout[0],
-            grid=gpu_layout[1],
+        # if 'air_ref_pixel'
+        # we need to copy projection reference pixels on the GPU
+        # because out-of-order execution prevents us from using
+        # the ref pixels in-line
+        #
+        # NOTE: For now the air_ref_pixel
+        #       must be within the first projection chunk
+
+        nr_projs = last_proj - first_proj + 1
+
+        if not 'boundingbox' in conf['app_state']['projs'] \
+            or 'boundingbox' in conf['app_state']['projs'] \
+            and (get_npy_data(conf, 'detector_boundingboxes')[0]
+                 == conf['app_state']['projs']['boundingbox']).all():
+
+            for i in xrange(nr_projs):
+                ref_pixel_idx = first_proj + i
+
+                gpuarray_copy(conf, gpu_input_data[i, air_ref_pixel[0],
+                              air_ref_pixel[1]],
+                              out=gpu_proj_ref_pixel_vals[ref_pixel_idx])
+
+    # Call GPU flux2proj kernel
+
+    if air_ref_pixel is not None:
+        gpu_flux2proj.prepared_async_call(
+            gpu_layout[1],
+            gpu_layout[0],
+            None,
+            gpu_alloc_from_array(gpu_input_data),
+            gpu_alloc_from_array(gpu_zero_norm),
+            gpu_alloc_from_array(gpu_air_norm),
+            first_proj,
+            last_proj,
+            gpu_alloc_from_array(gpu_proj_ref_pixel_vals),
+            shared_size=0,
             )
     else:
-
-        # if 'air_ref_pixel_idx' we need to move projection reference pixels to the GPU
-
-        gpu_pointer_from_array
-        gpu_proj_ref_pixel_vals_ptr = \
-            gpu_pointer_from_array(gpu_proj_ref_pixel_vals)
-        projs_data = get_npy_data(conf, 'projs_data')
-        for i in xrange(projs_data.shape[0]):
-            gpu_offset = i * gpu_proj_ref_pixel_vals.dtype.itemsize
-            gpu_module.memcpy_htod(int(gpu_proj_ref_pixel_vals_ptr
-                                   + gpu_offset),
-                                   projs_data[i].flat[air_ref_pixel_idx])
-
-        gpu_flux2proj(
-            gpu_input_data,
-            gpu_proj_ref_pixel_vals,
-            gpu_proj_count,
-            gpu_zero_norm,
-            gpu_air_norm,
-            block=gpu_layout[0],
-            grid=gpu_layout[1],
+        gpu_flux2proj.prepared_async_call(
+            gpu_layout[1],
+            gpu_layout[0],
+            None,
+            gpu_alloc_from_array(gpu_input_data),
+            gpu_alloc_from_array(gpu_zero_norm),
+            gpu_alloc_from_array(gpu_air_norm),
+            first_proj,
+            last_proj,
+            shared_size=0,
             )
+
     return (gpu_input_data, input_meta)
 
 
