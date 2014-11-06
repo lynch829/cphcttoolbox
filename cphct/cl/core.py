@@ -154,7 +154,8 @@ def __switch_active_gpu(conf, gpu_id):
     ----------
     conf : dict
         Configuration dictionary.
-
+    gpu_id : int
+        GPU device index
     Returns
     -------
     output : dict
@@ -420,7 +421,7 @@ def replace_constants(text, remap, wrap=False):
 
 def load_kernels(kernels_load_path, use_binary=False):
     """Load OpenCL kernels
-    
+
     Parameters
     ----------
     kernels_load_path : str
@@ -495,7 +496,7 @@ def generate_gpu_init(conf, rt_const):
     Returns
     -------
     output : str
-        Returns OpenCL kernel header and runtime configuration 
+        Returns OpenCL kernel runtime configuration based on *rt_const* entries
         based on *rt_const* entries        
     """
 
@@ -533,7 +534,7 @@ CUDA vs OpenCL:
  - global memory args are prefixed with '' vs __global
  - block shared mem is marked with __shared__ vs __local
  - thread private mem is marked with '' vs __private
- - functions are forced inline with __forceinline__ vs __forceinline
+ - functions are forced inline with __forceinline__ vs __inline
  - device functions are prefixed with __device__ vs ''
 */
 
@@ -544,11 +545,12 @@ CUDA vs OpenCL:
 #define FORCEINLINE __inline
 #define DEVICE 
 
+
 /* Thread memory syncronization within blocks:
 CUDA vs OpenCL:
  - sync is issued with __syncthreads() vs barrier(flags)
 please read about the meaning of flags for correctness
- */
+*/
 
 #define sync_shared_mem() barrier(CLK_LOCAL_MEM_FENCE)
 
@@ -638,22 +640,10 @@ def compile_kernels(conf, kernels_code, precompiled=False):
         const_code = replace_constants(const_code, [('%%', '%')],
                 wrap=False)
 
-        # TODO: find out which flags to pass to compiler and how
-
-        # cc_options = ['--compiler-options', '-fno-strict-aliasing',
-        #                '--use_fast_math', '-DUNIX', '-O2']
-        # cc_options = []
+        # OpenCL compile flags are described at:
+        # https://www.khronos.org/registry/cl/sdk/1.0/docs/man/xhtml/clBuildProgram.html
 
         cc_options = ['-cl-mad-enable', '-cl-fast-relaxed-math']
-
-        # nvcc_options = []
-        # arch_opts = ["compute_20"]
-
-        # arch_opts = None
-
-        # code_opts = ["compute_20"]
-
-        # code_opts = None
 
         if precompiled:
             program = gpu_module.Program(get_active_gpu_context(conf),
@@ -732,12 +722,7 @@ def gpu_save_kernels(conf):
         kernel_fd.close()
 
 
-def gpu_array_from_alloc(
-    conf,
-    mem_chunk,
-    shape,
-    data_type,
-    ):
+def gpu_array_from_alloc(conf, mem_chunk, shape, data_type):
     """Wrap raw mem_alloc in a GPUArray object with given shape and data_type
     for easy use e.g. in plugins.
 
@@ -781,12 +766,7 @@ def gpu_alloc_from_array(gpuarray_obj):
     return mem_chunk
 
 
-def gpu_array_alloc_offset(
-    conf,
-    gpuarray_obj,
-    offset,
-    shape,
-    ):
+def gpu_array_alloc_offset(conf, gpuarray_obj, offset, shape):
     """Offsets the raw memory allocation associated with 
     *gpuarray_obj* by *offset* elements.
 
@@ -830,7 +810,7 @@ def get_gpu_layout(
     Get GPU block layout based on rows and cols,
     and the number of threads pr. block. We aim at square layouts.
     We always return a grid z-dimension of 1 to support e.g. NVidia devices
-    with compute capability less than 2.0.
+    with compute capability less than 2.0 and CUDA versions prior to 4.0.
    
     Parameters
     ----------
@@ -894,5 +874,3 @@ def get_gpu_layout(
 
     return ((int(block_xdim), int(block_ydim), 1), (int(cols),
             int(rows), int(chunks)))
-
-

@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# io - GPU specific input/ouput helpers
-# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
+# io - shared GPU-specific input/ouput helpers
+# Copyright (C) 2011-2014  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -27,7 +27,7 @@
 # -- END_HEADER ---
 #
 
-"""GPU specific input/output helper functions"""
+"""Shared GPU-specific input/output helper functions"""
 
 from cphct.io import expand_path
 from cphct.cone.katsevich.npycore.io import fill_katsevich_npycore_conf

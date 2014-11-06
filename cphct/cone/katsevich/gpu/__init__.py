@@ -4,8 +4,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# __init__ - katsevich CUDA engine module init
-# Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
+# __init__ - katsevich share GPU engine module init
+# Copyright (C) 2011-2014  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
 #
@@ -27,7 +27,7 @@
 # -- END_HEADER ---
 #
 
-"""Cph CT Toolbox Katsevich CUDA engine module initializer"""
+"""Cph CT Toolbox Katsevich shared GPU engine module initializer"""
 
 __dummy = \
     '''This dummy right after the module doc string prevents PythonTidy

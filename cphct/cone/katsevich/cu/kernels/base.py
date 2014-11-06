@@ -219,7 +219,7 @@ def backproject_chunk(
     Returns
     -------
     output : gpuarray
-        Backprojected volume chunk
+        Backprojected volume chunk.
     """
 
     int32 = allowed_data_types['int32']

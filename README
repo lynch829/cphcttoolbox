@@ -1,5 +1,5 @@
 CphCT Toolbox README
-Last updated/generated 11-09-2014 15:18
+Last updated/generated 06-11-2014 16:40
 
 
   1. Cph CT Toolbox
@@ -78,7 +78,7 @@ Simply run pip with the default pypi.python.org as package source:
 
 Alternatively you can point pip to a specific version:
 
-  pip install https://pypi.python.org/packages/source/c/cphcttoolbox/cphcttoolbox-1.1.0.zip
+  pip install https://pypi.python.org/packages/source/c/cphcttoolbox/cphcttoolbox-1.1.1.zip
 
 If for some reason you can't or don't want to install globally on your
 system with pip you may still be able to use virtualenv[6] to
@@ -95,7 +95,7 @@ Simply run easy_install with the default pypi.python.org as package source:
 
 Alternatively you can point easy_install to a specific version:
 
-  easy_install https://pypi.python.org/packages/source/c/cphcttoolbox/cphcttoolbox-1.1.0.zip
+  easy_install https://pypi.python.org/packages/source/c/cphcttoolbox/cphcttoolbox-1.1.1.zip
 
 
 	3.3. Manual Installation
@@ -126,10 +126,10 @@ code without installing. Three steps are required to use this setup:
 Now you can run the applications using the absolute application paths. 
 
 An ultra short command line example to illustrate it:
-  wget https://pypi.python.org/packages/source/c/cphcttoolbox/cphcttoolbox-1.1.0.zip
-  unzip cphcttoolbox-1.1.0.zip
-  export PYTHONPATH=${PWD}/cphcttoolbox-1.1.0
-  python cphcttoolbox-1.1.0/conebeam/katsevich/katsevich.py --help
+  wget https://pypi.python.org/packages/source/c/cphcttoolbox/cphcttoolbox-1.1.1.zip
+  unzip cphcttoolbox-1.1.1.zip
+  export PYTHONPATH=${PWD}/cphcttoolbox-1.1.1
+  python cphcttoolbox-1.1.1/conebeam/katsevich/katsevich.py --help
 
 
 The archive download and unpack may be replaced by a checkout from the

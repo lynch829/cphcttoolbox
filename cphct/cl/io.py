@@ -57,9 +57,15 @@ def fill_base_cl_conf(conf):
     if not conf['engine']:
         conf['engine'] = 'opencl'
 
-    # Initiate dict for OpenCL allocations
+    # Initiate dict for OpenCL allocations and structures
 
     conf['cl_data'] = {}
+    conf['compute'] = {}
+
+    # Some options imply copy back to host
+
+    if conf['checksum'] or conf['save_filtered_projs_data_path']:
+        conf['gpu_projs_only'] = False
 
     return conf
 

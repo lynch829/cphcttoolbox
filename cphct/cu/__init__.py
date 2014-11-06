@@ -4,7 +4,7 @@
 #
 # --- BEGIN_HEADER ---
 #
-# __init__ - global pycuda engine module init
+# __init__ - Global pycuda engine module init
 # Copyright (C) 2011-2013  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
@@ -51,4 +51,4 @@ from pycuda import compiler, driver, tools, elementwise
 
 # All sub modules to load in case of 'from X import *'
 
-__all__ = ['core', 'gpu_array', 'io']
+__all__ = ['core', 'gpuarray', 'io']

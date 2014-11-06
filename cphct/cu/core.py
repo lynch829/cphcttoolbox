@@ -40,7 +40,7 @@ from cphct.misc import nextpow2
 
 def __get_gpu_device(gpu_context):
     """
-    Extract GPU device handles from initialized CUDA contexts
+    Extract GPU device handle from initialized CUDA contexts
     
     Parameters
     ----------
@@ -68,7 +68,7 @@ def __get_gpu_specs(gpu_context):
     Returns
     -------
     output : dict
-       Returns gpu devices specs dictionary
+       Returns gpu device specs dictionary
     """
 
     specs = __get_gpu_device(gpu_context).get_attributes()
@@ -219,7 +219,7 @@ def gpu_mem_info(conf):
     Returns
     -------
     output : tuple
-        Returns a tuple of free and total GPU memory.
+        Returns a tuple of free and total GPU memory in bytes.
     """
 
     return conf['gpu']['module'].mem_get_info()
@@ -336,7 +336,6 @@ def gpu_exit(conf):
         for gpu_id in conf['gpu']['context']:
             logging.debug('Detaching context for GPU: %s' % gpu_id)
             conf['gpu']['context'][gpu_id].detach()
-
         del conf['gpu']['context']
 
     if 'specs' in conf['gpu']:
@@ -525,6 +524,10 @@ please read about the meaning of flags for correctness
 
 #define sync_shared_mem() __syncthreads()
 
+/* Macros fixing CUDA quirks */
+
+// just use built-in conversion helpers in CUDA
+
 /* --- END CUDA HELPERS --- */
 
 /* --- BEGIN AUTOMATIC RUNTIME CONFIGURATION --- */
@@ -555,7 +558,6 @@ please read about the meaning of flags for correctness
                     conf[name])
     output += '''
 /* --- END AUTOMATIC RUNTIME CONFIGURATION --- */
-
 '''
     return output
 
@@ -646,7 +648,6 @@ def gpu_kernels_auto_init(conf, rt_const):
         conf['cu_kernels'] = \
             load_kernels_cubin(conf['load_gpu_binary_path'])
     elif conf['load_gpu_kernels_path']:
-
         kernels_code = ''
         if conf['load_gpu_init_path']:
             kernels_code += \
@@ -844,5 +845,3 @@ def get_gpu_layout(
 
     return ((int(block_xdim), int(block_ydim), 1), (int(grid_xdim),
             int(grid_ydim), int(chunks)))
-
-

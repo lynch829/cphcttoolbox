@@ -1,5 +1,5 @@
 CphCT Toolbox NEWS
-Last updated/generated 11-09-2014 15:18
+Last updated/generated 06-11-2014 16:40
 
 
   1. CphCT Toolbox News
@@ -9,6 +9,7 @@ Last updated/generated 11-09-2014 15:18
     1.4. CphCT 1.0.3
     1.5. CphCT 1.0.4
     1.6. CphCT 1.1.0
+    1.7. CphCT 1.1.1
 
 
   1. CphCT Toolbox News
@@ -80,4 +81,11 @@ there as well.
 Introduction of OpenCL versions to increase platform support quite a
 lot. Reworked some gpu layout choices to remove a number of unnecessary
 scalability limitations.
+
+
+	1.7. CphCT 1.1.1
+	================
+
+Bugfix release to properly filter Katsevich projections independently of
+the value of gpu-target-threads. 
 

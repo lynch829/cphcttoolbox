@@ -59,4 +59,4 @@ gpuarray.GPUArray = gpuarray.Array
 
 # All sub modules to load in case of 'from X import *'
 
-__all__ = []
+__all__ = ['core', 'io']

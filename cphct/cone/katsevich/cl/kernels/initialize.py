@@ -524,6 +524,8 @@ def init_recon(conf, fdt):
 
     gpu_proj_row_maxs.set(proj_row_maxs)
 
+    # Prepare GPU kernel calls
+
     __prepare_gpu_kernels(conf)
 
     return conf

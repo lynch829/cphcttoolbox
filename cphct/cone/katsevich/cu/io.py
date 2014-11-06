@@ -31,10 +31,7 @@
 
 from cphct.io import expand_path
 from cphct.cone.cu.io import fill_cone_cu_conf
-from cphct.cone.cu.io import fill_cone_cu_conf
-
 from cphct.cone.katsevich.gpu.io import fill_katsevich_gpu_conf
-from cphct.npycore import sqrt
 
 
 def fill_katsevich_cu_conf(conf):
@@ -55,7 +52,7 @@ def fill_katsevich_cu_conf(conf):
 
     fill_cone_cu_conf(conf)
     fill_katsevich_gpu_conf(conf)
-    
+
     # Set up additional vars based on final conf
     
     fdt = conf['data_type']

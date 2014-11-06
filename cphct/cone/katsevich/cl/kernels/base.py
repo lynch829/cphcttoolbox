@@ -32,8 +32,8 @@
 from cphct.log import logging
 from cphct.misc import timelog
 
-from cphct.npycore import allowed_data_types
 from cphct.cl.core import gpu_alloc_from_array
+from cphct.npycore import allowed_data_types
 
 
 def filter_chunk(
@@ -225,7 +225,9 @@ def backproject_chunk(
     """
 
     int32 = allowed_data_types['int32']
+
     gpu_layouts = conf['app_state']['gpu']['layouts']
+
     (backproject_block, backproject_grid) = gpu_layouts['backproject']
     prepared_kernels = conf['app_state']['gpu']['prepared_kernels']
 

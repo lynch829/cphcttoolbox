@@ -3,7 +3,7 @@
 # --- BEGIN_HEADER ---
 #
 # base - FDK cone beam reconstruction OpenCL Kernels
-# Copyright (C) 2011-2013  The CT-Toolbox Project lead by Brian Vinter
+# Copyright (C) 2011-2014  The CT-Toolbox Project lead by Brian Vinter
 #
 # This file is part of CT-Toolbox.
 #
@@ -25,6 +25,10 @@
 #
 */
 
+/* For debugging */
+/*
+#include <stdio.h>
+*/
 
 /*
 Pure kernels for circular cone beam CT in OpenCL using the FDK algorithm
@@ -47,8 +51,6 @@ This may come from init.cl or be hard coded from runtime generated code.
    Simply replace Xf(...) by X(...) in the code.
 */
 
-// TODO: is this inherited fabs() CUDA fix necessary in OpenCL, too?
-#define pow2f(x) pow(fabs(x), 2)
 #define sinf(x) sin(x)
 #define cosf(x) cos(x)
 #define tanf(x) tan(x)
@@ -57,6 +59,12 @@ This may come from init.cl or be hard coded from runtime generated code.
 
 // OpenCL uses sightly different sincos() API - wrap it manually
 #define sincosf(x, y, z) *(y) = sincos(x, z)
+
+
+/* Macros fixing OpenCL quirks */
+
+// Must force positive values in powf
+#define pow2f(x) pow(fabs(x), 2)
 
 
 /* Flat indexing macros */
@@ -71,12 +79,12 @@ This may come from init.cl or be hard coded from runtime generated code.
 /* Weight projection data */
 
 KERNEL void weight_proj(GLOBALMEM float *proj,
-			   const unsigned int proj_row_offset,
-			   GLOBALMEM float *weight) {
+			const unsigned int proj_row_offset,
+			GLOBALMEM float *weight) {
 
    unsigned int y = GET_GLOBAL_ID_Y;   
    unsigned int x = GET_GLOBAL_ID_X;
-     
+   
    proj[PROJ_IDX(y,x)] *= weight[PROJ_IDX(y+proj_row_offset,x)];
 }
 
@@ -90,10 +98,9 @@ KERNEL void weight_proj(GLOBALMEM float *proj,
  * one for the real part and one for the imaginary part.
  */
 
-KERNEL void proj_to_complex(
-            GLOBALMEM float *complex_proj,
-		      GLOBALMEM float *float_proj, 
-            const unsigned int nr_proj_rows) {
+KERNEL void proj_to_complex(GLOBALMEM float *complex_proj,
+			    GLOBALMEM float *float_proj,
+			    const unsigned int nr_proj_rows) {
 
    unsigned int y = GET_GLOBAL_ID_Y;   
    unsigned int x = GET_GLOBAL_ID_X;
@@ -124,9 +131,8 @@ KERNEL void proj_to_complex(
  * two times the projection filter width
  */
 
-KERNEL void filter_proj(
-            GLOBALMEM float *complex_proj,
-			   GLOBALMEM float *filter) {
+KERNEL void filter_proj(GLOBALMEM float *complex_proj,
+			GLOBALMEM float *filter) {
 
    unsigned int y = GET_GLOBAL_ID_Y;   
    unsigned int x = GET_GLOBAL_ID_X;
@@ -145,9 +151,8 @@ KERNEL void filter_proj(
  * (see proj_to_complex for more details)
  */
 
-KERNEL void complex_to_proj(
-            GLOBALMEM float *float_proj,
-			   GLOBALMEM float *complex_proj) {
+KERNEL void complex_to_proj(GLOBALMEM float *float_proj,
+			    GLOBALMEM float *complex_proj) {
 
    unsigned int y = GET_GLOBAL_ID_Y;   
    unsigned int x = GET_GLOBAL_ID_X;
@@ -158,10 +163,9 @@ KERNEL void complex_to_proj(
 
 /* Generate volume weight based on projection angle and voxel coordinates */
 
-KERNEL void generate_volume_weight(
-            GLOBALMEM float *volume_weight_matrix,
-				GLOBALMEM float *combined_matrix,
-				const float proj_angle_rad) {
+KERNEL void generate_volume_weight(GLOBALMEM float *volume_weight_matrix,
+				   GLOBALMEM float *combined_matrix,
+				   const float proj_angle_rad) {
    
    unsigned int y = GET_GLOBAL_ID_Y;
    unsigned int x = GET_GLOBAL_ID_X;
@@ -198,12 +202,11 @@ KERNEL void generate_volume_weight(
  * This function backprojects one voxel from the projection data,
  */
 
-FORCEINLINE DEVICE void backproject_slice(
-            float *recon_voxel,
-				float *transform_matrix, 
-				float *combined,
-				GLOBALMEM float *proj_data,
-				unsigned int *proj_row_offset) {
+FORCEINLINE DEVICE void backproject_slice(float *recon_voxel,
+					  float *transform_matrix, 
+					  float *combined,
+					  GLOBALMEM float *proj_data,
+					  unsigned int *proj_row_offset) {
 
    // First calculate the dot product between transform and combined
 
@@ -242,12 +245,12 @@ FORCEINLINE DEVICE void backproject_slice(
          
    map_col = int(rintf(alpha 
 		       * SOURCE_DETECTOR_DISTANCE 
-		       * (1.0f/rt_detector_pixel_width) 
+		       * (1.0f/rt_detector_pixel_width)
 		       + rt_detector_column_shift));
            
    map_row = int(rintf(flat_map_row 
 		       * cosf(alpha) 
-		       * (1.0f/rt_detector_pixel_height) 
+		       * (1.0f/rt_detector_pixel_height)
 		       + rt_detector_row_shift));
 #endif
 
@@ -271,8 +274,7 @@ FORCEINLINE DEVICE void backproject_slice(
  * backprojects the projection data for each slice 
  */
 
-KERNEL void backproject(
-         GLOBALMEM float *recon_chunk,
+KERNEL void backproject(GLOBALMEM float *recon_chunk,
 			GLOBALMEM float *proj_data,
 			const unsigned int proj_row_offset,
 			const unsigned int chunk_index,

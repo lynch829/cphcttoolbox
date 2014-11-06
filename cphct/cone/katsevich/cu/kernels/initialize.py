@@ -510,6 +510,7 @@ def init_recon(conf, fdt):
         'proj_row_mins',
         'proj_row_maxs',
         ]
+
     if conf['proj_filter'] != 'skip':
         cu_mirrors.append('proj_filter_array')
 
@@ -537,7 +538,9 @@ def init_recon(conf, fdt):
 
     if conf['proj_filter'] != 'skip':
         gpu_proj_filter_array.set(proj_filter_array)
+
     gpu_proj_row_mins.set(proj_row_mins)
+
     gpu_proj_row_maxs.set(proj_row_maxs)
 
     # Prepare GPU kernel calls
