@@ -110,8 +110,10 @@ def plugin_init(conf, raw_voxel_water):
 
     __plugin_state__['gpu_raw_voxel_water'] = \
         gpuarray.to_gpu(npy_raw_voxel_water)
-    __plugin_state__['gpu_layout'] = get_gpu_layout(conf['y_voxels'],
-            conf['x_voxels'], conf['gpu_target_threads'])
+    __plugin_state__['gpu_layout'] = get_gpu_layout(conf['chunk_size'],
+                                                    conf['y_voxels'],
+                                                    conf['x_voxels'],
+                                                    conf['gpu_target_threads'])
     __plugin_state__['gpu_kernels'] = __make_gpu_kernels(conf)
 
     if not __plugin_state__['gpu_kernels']:

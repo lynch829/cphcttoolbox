@@ -56,7 +56,7 @@ short_name = 'cphcttoolbox'
 
 # IMPORTANT: Please keep version in sync with doc-src/README.t2t
 
-version_tuple = (1, 1, 1)
+version_tuple = (1, 1, 2)
 version_suffix = ''
 version_string = '.'.join([str(i) for i in version_tuple]) + version_suffix
 package_version = '%s %s' % (package_name, version_string)

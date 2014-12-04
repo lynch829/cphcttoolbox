@@ -2,8 +2,8 @@
 #
 # --- BEGIN_HEADER ---
 #
-# kernels - clip OpenCL Kernels
-# Copyright (C) 2012-2013  The CT-Toolbox Project lead by Brian Vinter
+# kernels - clip CUDA Kernels
+# Copyright (C) 2012-2014  The CT-Toolbox Project lead by Brian Vinter
 #
 # This file is part of CT-Toolbox.
 #

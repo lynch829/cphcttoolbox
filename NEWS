@@ -1,5 +1,5 @@
 CphCT Toolbox NEWS
-Last updated/generated 06-11-2014 16:40
+Last updated/generated 04-12-2014 12:13
 
 
   1. CphCT Toolbox News
@@ -10,6 +10,7 @@ Last updated/generated 06-11-2014 16:40
     1.5. CphCT 1.0.4
     1.6. CphCT 1.1.0
     1.7. CphCT 1.1.1
+    1.8. CphCT 1.1.2
 
 
   1. CphCT Toolbox News
@@ -88,4 +89,11 @@ scalability limitations.
 
 Bugfix release to properly filter Katsevich projections independently of
 the value of gpu-target-threads. 
+
+
+	1.8. CphCT 1.1.2
+	================
+
+Minor bugfix release to address a bug in some of the GPU plugins that
+made them crash.
 

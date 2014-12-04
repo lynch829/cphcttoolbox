@@ -109,8 +109,10 @@ def plugin_init(conf, clip_min, clip_max):
 
     __plugin_state__['clip_min'] = min_val
     __plugin_state__['clip_max'] = max_val
-    __plugin_state__['gpu_layout'] = get_gpu_layout(conf['y_voxels'],
-            conf['x_voxels'], conf['gpu_target_threads'])
+    __plugin_state__['gpu_layout'] = get_gpu_layout(conf['chunk_size'],
+                                                    conf['y_voxels'],
+                                                    conf['x_voxels'],
+                                                    conf['gpu_target_threads'])
     __plugin_state__['gpu_kernels'] = __make_gpu_kernels(conf)
 
     if not __plugin_state__['gpu_kernels']:

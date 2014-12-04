@@ -4,7 +4,7 @@
 #
 # --- BEGIN_HEADER ---
 #
-# __init__ - maskvolumefov OpenCL module init
+# __init__ - maskvolumefov CUDA module init
 # Copyright (C) 2012-2014  The Cph CT Toolbox Project lead by Brian Vinter
 #
 # This file is part of Cph CT Toolbox.
@@ -27,7 +27,7 @@
 # -- END_HEADER ---
 #
 
-"""Cph CT Toolbox maskvolumefov OpenCL module initializer"""
+"""Cph CT Toolbox maskvolumefov CUDA module initializer"""
 
 __dummy = \
     '''This dummy right after the module doc string prevents PythonTidy
